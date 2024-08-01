@@ -1,0 +1,100 @@
+#pragma once
+
+#include <cstdint>
+#include <poplar/ArrayRef.hpp>
+#include <poplar/Type.hpp>
+
+#include "libgraphene/common/Concepts.hpp"
+#include "libtwofloat/algorithms.hpp"
+#include "libtwofloat/twofloat.hpp"
+
+namespace graphene {
+
+template <DataType Type>
+struct Traits {
+ public:
+  static_assert(sizeof(Type) == 0, "Traits not specialized for this type");
+};
+template <>
+struct Traits<float> {
+  static float inline zero() { return 0.0f; }
+  static float inline one() { return 1.0f; }
+  static float inline large() { return 1e-20f; }
+  static float inline small() { return 1e-20f; }
+  static float inline vsmall() { return 1e-37f; }
+  static constexpr poplar::Type &PoplarType = poplar::FLOAT;
+  using PoplarHostType = float;
+};
+template <>
+struct Traits<double> {
+  static twofloat::two<float> inline zero() { return {0.0f, 0.0f}; };
+  static twofloat::two<float> inline one() { return {1.0f, 0.0f}; };
+  static constexpr poplar::Type &PoplarType = poplar::LONGLONG;
+  using PoplarHostType = signed long long;
+};
+template <>
+struct Traits<uint32_t> {
+  static uint32_t inline zero() { return 0; }
+  static uint32_t inline one() { return 1; }
+  static constexpr poplar::Type &PoplarType = poplar::UNSIGNED_INT;
+  using PoplarHostType = unsigned int;
+};
+template <>
+struct Traits<int32_t> {
+  static int32_t inline zero() { return 0; }
+  static int32_t inline one() { return 1; }
+  static constexpr poplar::Type &PoplarType = poplar::INT;
+  using PoplarHostType = signed int;
+};
+template <>
+struct Traits<int16_t> {
+  static int16_t inline zero() { return 0; }
+  static int16_t inline one() { return 1; }
+  static constexpr poplar::Type &PoplarType = poplar::SHORT;
+  using PoplarHostType = signed short;
+};
+template <>
+struct Traits<uint16_t> {
+  static uint16_t inline zero() { return 0; }
+  static uint16_t inline one() { return 1; }
+  static constexpr poplar::Type &PoplarType = poplar::UNSIGNED_SHORT;
+  using PoplarHostType = unsigned short;
+};
+template <>
+struct Traits<uint8_t> {
+  static uint8_t inline zero() { return 0; }
+  static uint8_t inline one() { return 1; }
+  static constexpr poplar::Type &PoplarType = poplar::UNSIGNED_CHAR;
+  using PoplarHostType = unsigned char;
+};
+template <>
+struct Traits<int8_t> {
+  static int8_t inline zero() { return 0; }
+  static int8_t inline one() { return 1; }
+  static constexpr poplar::Type &PoplarType = poplar::CHAR;
+  using PoplarHostType = signed char;
+};
+
+template <>
+struct Traits<bool> {
+  static bool inline zero() { return false; }
+  static bool inline one() { return true; }
+  static constexpr poplar::Type &PoplarType = poplar::BOOL;
+  using PoplarHostType = bool;
+};
+
+template <PoplarNativeType Type>
+auto inline toPoplarHostType(Type val)
+  requires PoplarNativeType<Type>
+{
+  return val;
+}
+
+auto inline toPoplarHostType(double val) {
+  float x = (float)val;
+  float y = (float)(val - x);
+  twofloat::two<float> twoFloat{x, y};
+  return *reinterpret_cast<long long *>(&twoFloat);
+}
+
+}  // namespace graphene

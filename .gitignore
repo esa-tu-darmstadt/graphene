@@ -1,0 +1,10 @@
+.cache/
+build/
+
+# Ignore all matrices for now
+*.mtx
+
+# Ignore all poplar profiles
+profile*.pop
+archive.a
+debug.cbor

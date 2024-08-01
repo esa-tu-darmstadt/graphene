@@ -1,0 +1,22 @@
+add_library(GrapheneMatrix SHARED 
+    "Norm.cpp"
+    "Matrix.cpp"
+    "details/crs/CRSMatrix.cpp"
+    "details/MatrixBase.cpp"
+    "host/HostMatrix.cpp"
+    "host/TileLayout.cpp"
+    "host/formats/Common.cpp"
+    "host/details/HostMatrixBase.cpp"
+    "host/details/crs/CRSHostMatrix.cpp"
+    "solver/Solver.cpp"
+    "solver/Configuration.cpp"
+    "solver/SolverStats.cpp"
+    "solver/gauss-seidel/Solver.cpp"
+    "solver/gauss-seidel/Configuration.cpp"
+    "solver/ilu/Solver.cpp"
+    "solver/ilu/Configuration.cpp"
+    "solver/iterative-refinement/Solver.cpp"
+    "solver/iterative-refinement/Configuration.cpp"
+    "solver/pbicgstab/Solver.cpp"
+    "solver/pbicgstab/Configuration.cpp")
+target_link_libraries(GrapheneMatrix PRIVATE GrapheneCommon GrapheneUtil GrapheneDSL nlohmann_json::nlohmann_json fast_matrix_market::fast_matrix_market)

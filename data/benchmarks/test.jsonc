@@ -1,0 +1,51 @@
+{
+    "tiles": 1000,
+    "profileDirectory": "test/",
+    "matrix": "../matrices/G3_circuit/G3_circuit.mtx",
+    "x0": 0.0,
+    "b": 1.0,
+    "benchmark": "solve",
+    "solver": {
+        "type": "IterativeRefinement",
+        "relResidual": 1e-3,
+        "maxIterations": 100000,
+        "mixedPrecision": true,
+        "printPerformanceAfterSolve": true,
+        "innerSolver": {
+            "type": "PBiCGStab",
+            "verbose": true,
+            "maxIterations": 200,
+            "printPerformanceEachIteration": true,
+            "printPerformanceAfterSolve": true,
+            "preconditioner": {
+                "type": "ILU",
+                "diagonalBased": true
+            }
+        },
+        // "innerSolver": {
+        //     "type": "GaussSeidel",
+        //     "numFixedIterations": 1000,
+        //     "solveMulticolor": "auto"
+        // }
+        "innerSolver_XXX": {
+            "type": "ILU",
+            "diagonalBased": true
+        }
+        // "type": "PBiCGStab",
+        // "maxIterations": 100,
+        // "verbose": true,
+        // "relResidual": 1e-5,
+        // "printPerformanceEachIteration": true,
+        // "preconditioner": {
+        //     "type": "ILU",
+        //     "diagonalBased": true,
+        //     "factorizeMulticolor": "auto",
+        //     "solveMulticolor": "auto"
+        // },
+        // "preconditioner_XXX": {
+        //     "type": "GaussSeidel",
+        //     "maxIterations": 100,
+        //     "printPerformanceAfterSolve": true
+        // }
+    }
+}

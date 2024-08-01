@@ -1,0 +1,2 @@
+add_library(GrapheneDSL SHARED "RemoteValue.cpp" "Value.cpp" "Operators.cpp" "Expression.cpp" "HostValue.cpp" "ControlFlow.cpp")
+target_link_libraries(GrapheneDSL PRIVATE GrapheneCommon GrapheneUtil popops)

@@ -1,0 +1,14 @@
+{
+	"folders": [
+		{
+			"path": "."
+		}
+	],
+	"settings": {
+		"cmake.configureArgs": [
+			"-DPOPLIBS_ENABLED_IPU_ARCH_NAMES=ipu2"
+			// "-DCMAKE_VERBOSE_MAKEFILE=ON",
+		],
+		"editor.formatOnSave": true,
+	}
+}

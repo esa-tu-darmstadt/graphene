@@ -1,0 +1,172 @@
+#include "libgraphene/matrix/solver/pbicgstab/Solver.hpp"
+
+#include <spdlog/spdlog.h>
+
+#include "libgraphene/dsl/ControlFlow.hpp"
+#include "libgraphene/dsl/Operators.hpp"
+#include "libgraphene/matrix/Matrix.hpp"
+#include "libgraphene/matrix/solver/SolverStats.hpp"
+#include "libgraphene/util/Context.hpp"
+#include "libgraphene/util/DebugInfo.hpp"
+#include "libgraphene/util/Tracepoint.hpp"
+
+namespace graphene::matrix::solver::pbicgstab {
+
+#define PBICGSTAB_VERBOSE_PRINT(x) \
+  if (config_->verbose) {          \
+    x.print(#x);                   \
+  }
+
+template <DataType Type>
+SolverStats Solver<Type>::solve(Value<Type>& x, Value<Type>& b) {
+  GRAPHENE_TRACEPOINT();
+
+  if (config_->preconditioner && !preconditioner_)
+    preconditioner_ = solver::Solver<Type>::createSolver(
+        this->matrix(), config_->preconditioner);
+
+  const Matrix<Type>& A = this->matrix();
+  if (!A.isVectorCompatible(x, true, true))
+    throw std::runtime_error("x must be vector with halo cells.");
+
+  if (!A.isVectorCompatible(b, false, true))
+    throw std::runtime_error("b must be vector without halo cells.");
+
+  DebugInfo di("PBiCGStabSolver");
+
+  auto& program = Context::program();
+
+  SolverStats stats(this->name(), config_->norm, A.numTiles());
+
+  // Calculate the initial residual field rA
+  Value<Type> rA = A.residual(x, b);
+
+  // Calculate the norm of b if required
+  if (stats.requiresBNorm(config_->relTolerance))
+    stats.bNorm = A.vectorNorm(config_->norm, x);
+
+  // Calculate the initial residual
+  stats.initialResidual = A.vectorNorm(config_->norm, rA);
+  stats.finalResidual = stats.initialResidual;
+
+  Value<Type> rA0rAold(0);
+  Value<Type> alpha(0);
+  Value<Type> omega(0);
+
+  // Store the initial residual
+  Value<Type> rA0 = rA;
+  Value<Type> pA = rA;
+  Value<Type> AyA = A.template createUninitializedVector<Type>(false);
+
+  auto terminate =
+      (stats.converged && stats.iterations >= config_->minIterations) ||
+      (stats.iterations >= config_->maxIterations) || stats.singular;
+
+  cf::While(!terminate, [&]() {
+    Value<Type> rA0rA = Value<Type>(rA0 * rA).reduce();
+    PBICGSTAB_VERBOSE_PRINT(rA0rA);
+
+    // Check for rA0rA for singularity
+    stats.checkSingularity(ops::Abs(rA0rA));
+    cf::If(!stats.singular, [&]() {
+      // Calculate pA if needed
+      cf::If(stats.iterations != 0, [&]() {
+        auto beta = (rA0rA / rA0rAold) * (alpha / omega);
+        pA = rA + beta * (pA - omega * AyA);
+      });
+
+      // Precondition pA
+      // Calculate yA = M^-1 * pA by solving M * yA = pA
+      Value<Type> yA = A.template createUninitializedVector<Type>(true);
+      if (preconditioner_) {
+        if (preconditioner_->usesInitialGuess()) {
+          yA = 0;
+        }
+        preconditioner_->solve(yA, pA);
+      } else {
+        A.stripHaloCellsFromVector(yA) = pA;
+      }
+
+      PBICGSTAB_VERBOSE_PRINT(pA);
+      PBICGSTAB_VERBOSE_PRINT(yA);
+
+      // Update AyA
+      AyA = A * yA;
+
+      // Update alpha
+      Value<Type> rA0AyA = Value<Type>(rA0 * AyA).reduce();
+      alpha = rA0rA / rA0AyA;
+
+      PBICGSTAB_VERBOSE_PRINT(rA0AyA);
+      PBICGSTAB_VERBOSE_PRINT(alpha);
+
+      // Calculate sA
+      Value<Type> sA = rA - alpha * AyA;
+
+      // The original BiCGStab algorithm would check for convergence here, but
+      // we skip it to prevent bloating up the graph
+
+      // Optionally precondition sA into zA
+      Value<Type> zA = A.template createUninitializedVector<Type>(true);
+      if (preconditioner_) {
+        if (preconditioner_->usesInitialGuess()) {
+          zA = 0;
+        }
+        preconditioner_->solve(zA, sA);
+      } else {
+        A.stripHaloCellsFromVector(zA) = sA;
+      }
+
+      PBICGSTAB_VERBOSE_PRINT(sA);
+      PBICGSTAB_VERBOSE_PRINT(zA);
+
+      // Calculate tA
+      Value<Type> tA = A * zA;
+      Value<Type> tAtA = Value<Type>(tA * tA).reduce();
+
+      // Update omega from tA and sA
+      omega = Value<Type>(tA * sA).reduce() / tAtA;
+
+      PBICGSTAB_VERBOSE_PRINT(tA);
+      PBICGSTAB_VERBOSE_PRINT(tAtA);
+      PBICGSTAB_VERBOSE_PRINT(omega);
+
+      stats.checkSingularity(ops::Abs(omega));
+
+      // Update psi and rA if omega and tAtA are not singular
+      cf::If(!stats.singular, [&]() {
+        // Update solution
+        x = x + alpha * yA + omega * zA;
+        PBICGSTAB_VERBOSE_PRINT(x);
+
+        // Update residual
+        rA = sA - omega * tA;
+        PBICGSTAB_VERBOSE_PRINT(rA);
+
+        stats.finalResidual = A.vectorNorm(config_->norm, rA);
+        stats.checkConvergence(config_->absTolerance, config_->relTolerance,
+                               config_->relResidual);
+
+        // Store previous rA0rA
+        rA0rAold = rA0rA;
+
+        // Increment the iteration counter
+        stats.iterations = stats.iterations + 1;
+
+        // Print performance if requested
+        if (config_->printPerformanceEachIteration) {
+          stats.print();
+        }
+      });
+    });
+  });
+
+  if (config_->printPerformanceAfterSolve) {
+    stats.print();
+  }
+
+  return stats;
+}
+
+template class Solver<float>;
+}  // namespace graphene::matrix::solver::pbicgstab
