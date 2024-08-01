@@ -163,11 +163,11 @@ void Solver<Type>::solveCRS(Value<Type>& x, Value<Type>& b) {
       codeletName = poputil::templateVertex(
           codeletName, Traits<Type>::PoplarType, rowPtrTile.elementType(),
           colIndTile.elementType(), colorSortAddrTile.elementType(),
-          colorSortStartPtrTile.elementType());
+          colorSortStartPtrTile.elementType(), config_->diagonalBased);
     } else {
       codeletName = poputil::templateVertex(
           codeletName, Traits<Type>::PoplarType, rowPtrTile.elementType(),
-          colIndTile.elementType());
+          colIndTile.elementType(), config_->diagonalBased);
     }
 
     auto vertex = graph.addVertex(cs, codeletName);

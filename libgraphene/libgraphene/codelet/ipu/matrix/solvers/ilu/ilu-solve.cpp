@@ -9,7 +9,8 @@
 using namespace poplar;
 
 namespace graphene::matrix::solver::ilu {
-template <typename value_t, typename rowptr_t, typename colind_t>
+template <typename value_t, typename rowptr_t, typename colind_t,
+          bool diagonalBased>
 class ILUSolveCRS : public poplar::Vertex {
  public:
   InOut<Vector<value_t>> x;
@@ -43,13 +44,18 @@ class ILUSolveCRS : public poplar::Vertex {
         float l_ij = offDiagCoeffs[a];
         temp -= l_ij * x[j];
       }
-      // The diagonal element of L is 1, so we don't need to multiply it
-      x[i] = temp;
+
+      if constexpr (diagonalBased) {
+        x[i] = temp * inverseDiagCoeffs[i];
+      } else {
+        // The diagonal of L is 1, so no need to multiply
+        x[i] = temp;
+      }
     }
 
     // upper triangular solve
     for (int i = (int)nRowsWithoutHalo - 1; i >= 0; i--) {
-      float temp = x[i];
+      float temp = 0;
 
       // Iterate over upper triangular part of the matrix
       // => for every i < j
@@ -69,7 +75,11 @@ class ILUSolveCRS : public poplar::Vertex {
         float a_ij = offDiagCoeffs[a];
         temp -= a_ij * x[j];
       }
-      x[i] = temp * inverseDiagCoeffs[i];
+      if constexpr (diagonalBased) {
+        x[i] = x[i] + temp * inverseDiagCoeffs[i];
+      } else {
+        x[i] = (x[i] + temp) * inverseDiagCoeffs[i];
+      }
     }
     return true;
   }
@@ -84,20 +94,26 @@ class ILUSolveCRS : public poplar::Vertex {
   INSTANTIATE_3(value_t, rowptr_t, unsigned int);   \
   INSTANTIATE_3(value_t, rowptr_t, unsigned short); \
   INSTANTIATE_3(value_t, rowptr_t, unsigned char);
-#define INSTANTIATE_3(value_t, rowptr_t, colind_t) \
-  template class ILUSolveCRS<value_t, rowptr_t, colind_t>;
+#define INSTANTIATE_3(value_t, rowptr_t, colind_t)  \
+  INSTANTIATE_4(value_t, rowptr_t, colind_t, true); \
+  INSTANTIATE_4(value_t, rowptr_t, colind_t, false);
+#define INSTANTIATE_4(value_t, rowptr_t, colind_t, diagonalBased) \
+  template class ILUSolveCRS<value_t, rowptr_t, colind_t, diagonalBased>;
 
 INSTANTIATE();
 #undef INSTANTIATE
 #undef INSTANTIATE_1
 #undef INSTANTIATE_2
 #undef INSTANTIATE_3
+#undef INSTANTIATE_4
 
 template <typename value_t, typename rowptr_t, typename colind_t,
-          typename colorsortaddr_t, typename colorsortstartaddr_t>
+          typename colorsortaddr_t, typename colorsortstartaddr_t,
+          bool diagonalBased>
 class ILUSolveCRSMulticolor : public poplar::SupervisorVertex {
-  using ThisType = ILUSolveCRSMulticolor<value_t, rowptr_t, colind_t,
-                                         colorsortaddr_t, colorsortstartaddr_t>;
+  using ThisType =
+      ILUSolveCRSMulticolor<value_t, rowptr_t, colind_t, colorsortaddr_t,
+                            colorsortstartaddr_t, diagonalBased>;
   volatile size_t currentColor_;
   size_t nRowsWithoutHalo;
 
@@ -164,8 +180,12 @@ class ILUSolveCRSMulticolor : public poplar::SupervisorVertex {
         float l_ij = offDiagCoeffs[a];
         temp -= l_ij * x[j];
       }
-      // The diagonal element of L is 1, so we don't need to multiply it
-      x[i] = temp;
+      if constexpr (diagonalBased) {
+        x[i] = temp * inverseDiagCoeffs[i];
+      } else {
+        // The diagonal of L is 1, so no need to multiply
+        x[i] = temp;
+      }
     }
 
     return true;
@@ -180,7 +200,7 @@ class ILUSolveCRSMulticolor : public poplar::SupervisorVertex {
     for (size_t colorSortI = colorSortStart + threadId;
          colorSortI < colorSortEnd; colorSortI += MultiVertex::numWorkers()) {
       size_t i = colorSortAddr[colorSortI];
-      float temp = x[i];
+      float temp = 0;
 
       // Iterate over upper triangular part of the matrix
       // => for every i < j
@@ -200,7 +220,11 @@ class ILUSolveCRSMulticolor : public poplar::SupervisorVertex {
         float a_ij = offDiagCoeffs[a];
         temp -= a_ij * x[j];
       }
-      x[i] = temp * inverseDiagCoeffs[i];
+      if constexpr (diagonalBased) {
+        x[i] = x[i] + temp * inverseDiagCoeffs[i];
+      } else {
+        x[i] = (x[i] + temp) * inverseDiagCoeffs[i];
+      }
     }
 
     return true;
@@ -226,11 +250,17 @@ class ILUSolveCRSMulticolor : public poplar::SupervisorVertex {
   INSTANTIATE_5(value_t, rowptr_t, colind_t, colorsortaddr_t, unsigned int);   \
   INSTANTIATE_5(value_t, rowptr_t, colind_t, colorsortaddr_t, unsigned short); \
   INSTANTIATE_5(value_t, rowptr_t, colind_t, colorsortaddr_t, unsigned char);
-
 #define INSTANTIATE_5(value_t, rowptr_t, colind_t, colorsortaddr_t, \
                       colorsortstartaddr_t)                         \
-  template class ILUSolveCRSMulticolor<value_t, rowptr_t, colind_t, \
-                                       colorsortaddr_t, colorsortstartaddr_t>;
+  INSTANTIATE_6(value_t, rowptr_t, colind_t, colorsortaddr_t,       \
+                colorsortstartaddr_t, true);                        \
+  INSTANTIATE_6(value_t, rowptr_t, colind_t, colorsortaddr_t,       \
+                colorsortstartaddr_t, false);
+#define INSTANTIATE_6(value_t, rowptr_t, colind_t, colorsortaddr_t,           \
+                      colorsortstartaddr_t, diagonalBased)                    \
+  template class ILUSolveCRSMulticolor<value_t, rowptr_t, colind_t,           \
+                                       colorsortaddr_t, colorsortstartaddr_t, \
+                                       diagonalBased>;
 
 INSTANTIATE();
 #undef INSTANTIATE
