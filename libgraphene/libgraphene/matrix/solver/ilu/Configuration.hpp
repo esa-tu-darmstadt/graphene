@@ -12,7 +12,7 @@ struct Configuration : solver::Configuration,
                        public std::enable_shared_from_this<Configuration> {
   MultiColorMode solveMulticolor = MultiColorMode::Auto;
   MultiColorMode factorizeMulticolor = MultiColorMode::Auto;
-  bool diagonalBased = true;
+  bool diagonalBased = false;
 
   Configuration() = default;
   Configuration(nlohmann::json const& config);
