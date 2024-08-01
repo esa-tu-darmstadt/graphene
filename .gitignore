@@ -4,6 +4,8 @@ build/
 # Ignore all matrices for now
 *.mtx
 
+graphProgram.json
+
 # Ignore all poplar profiles
 profile*.pop
 archive.a
