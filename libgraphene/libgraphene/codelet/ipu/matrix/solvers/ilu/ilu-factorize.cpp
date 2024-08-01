@@ -296,7 +296,23 @@ class ILUFactorizeCRS : public poplar::Vertex {
   }
 };
 
-template class ILUFactorizeCRS<float, unsigned short, unsigned short>;
+#define INSTANTIATE() INSTANTIATE_1(float);
+#define INSTANTIATE_1(value_t)            \
+  INSTANTIATE_2(value_t, unsigned int);   \
+  INSTANTIATE_2(value_t, unsigned short); \
+  INSTANTIATE_2(value_t, unsigned char);
+#define INSTANTIATE_2(value_t, rowptr_t)            \
+  INSTANTIATE_3(value_t, rowptr_t, unsigned int);   \
+  INSTANTIATE_3(value_t, rowptr_t, unsigned short); \
+  INSTANTIATE_3(value_t, rowptr_t, unsigned char);
+#define INSTANTIATE_3(value_t, rowptr_t, colind_t) \
+  template class ILUFactorizeCRS<value_t, rowptr_t, colind_t>;
+
+INSTANTIATE();
+#undef INSTANTIATE
+#undef INSTANTIATE_1
+#undef INSTANTIATE_2
+#undef INSTANTIATE_3
 
 // ------------------------------------------------------------
 // ILU(0) factorization, multicolor
