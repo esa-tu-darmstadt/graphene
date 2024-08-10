@@ -1,9 +1,11 @@
 #pragma once
 
+#include <any>
 #include <initializer_list>
 #include <optional>
 #include <poplar/Graph.hpp>
 #include <popops/Reduce.hpp>
+#include <typeindex>
 #include <variant>
 
 #include "libgraphene/common/Concepts.hpp"
@@ -28,6 +30,8 @@ class Value : public Expression<Type> {
   // The tile mapping and shape of the tensor. Cached for performance reasons.
   mutable std::optional<TileMapping> tileMapping_;
   mutable std::optional<std::vector<size_t>> shape_;
+
+  std::map<std::type_index, std::any> metadata_;
 
  public:
   /**
@@ -173,6 +177,38 @@ class Value : public Expression<Type> {
   template <typename DestType>
   Value<DestType> cast() const
     requires std::is_same_v<Type, float> && std::is_same_v<DestType, double>;
+
+  /** @brief Stores metadata in the value.
+   *
+   * @tparam MetadataType The type of the metadata.
+   * @param metadata The metadata to store.
+   */
+  template <typename MetadataType>
+  void setMetadata(MetadataType metadata) {
+    metadata_[std::type_index(typeid(MetadataType))] = metadata;
+  }
+
+  /** @brief Gets metadata from the value.
+   *
+   * @tparam MetadataType The type of the metadata.
+   * @return MetadataType The metadata.
+   */
+  template <typename MetadataType>
+  MetadataType getMetadata() const {
+    return std::any_cast<MetadataType>(
+        metadata_.at(std::type_index(typeid(MetadataType))));
+  }
+
+  /** @brief Checks if the value has metadata of the given type.
+   *
+   * @tparam MetadataType The type of the metadata.
+   * @return bool True if the value has metadata of the given type.
+   */
+  template <typename MetadataType>
+  bool hasMetadata() const {
+    return metadata_.find(std::type_index(typeid(MetadataType))) !=
+           metadata_.end();
+  }
 };
 
 /** Unrolls the double word arithmetic tensor. A double word arithmetic

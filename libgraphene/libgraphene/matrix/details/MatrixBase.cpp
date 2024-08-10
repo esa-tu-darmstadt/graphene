@@ -2,6 +2,7 @@
 
 #include <cstddef>
 #include <poplar/Interval.hpp>
+#include <poplar/Program.hpp>
 
 #include "libgraphene/matrix/Norm.hpp"
 #include "libgraphene/matrix/host/TileLayout.hpp"
@@ -16,13 +17,28 @@ template <typename VectorType>
 void MatrixBase<Type>::exchangeHaloCells(Value<VectorType> &value) const {
   DebugInfo di("MatrixBase");
 
+  struct ExchangeHaloCellsMetadata {
+    poplar::Function function;
+  };
+
+  // Check if an exchange program has already been generated
+  if (value.template hasMetadata<ExchangeHaloCellsMetadata>()) {
+    spdlog::trace("Using cached exchange program");
+    auto metadata = value.template getMetadata<ExchangeHaloCellsMetadata>();
+    Context::program().add(poplar::program::Call(metadata.function, di));
+    return;
+  }
+
   // Get the mapping
   auto [mapping, shape] = hostMatrix.getVectorTileMappingAndShape(true);
 
-  // Make s
+  // Make sure that the vector is compatible with the matrix layout
   if (!this->isVectorCompatible(value, true, false))
     throw std::runtime_error(
         "Vector x is not compatible with the layout of the matrix");
+
+  std::vector<poplar::Tensor> srcTensors;
+  std::vector<poplar::Tensor> destTensors;
 
   for (size_t tile = 0; tile < mapping.size(); ++tile) {
     poplar::Tensor destTileTensor = value.tensorOnTile(tile);
@@ -61,10 +77,21 @@ void MatrixBase<Type>::exchangeHaloCells(Value<VectorType> &value) const {
           srcTileTensor.slice(srcLocalStartCelli, srcLocalEndCelli + 1, 0);
       poplar::Tensor destRegionTensor =
           destTileTensor.slice(destLocalStartCelli, destLocalEndCelli + 1, 0);
-      Context::program().add(
-          poplar::program::Copy(srcRegionTensor, destRegionTensor, false, di));
+
+      srcTensors.push_back(srcRegionTensor);
+      destTensors.push_back(destRegionTensor);
     }
   }
+  // Create a function for the exchange program and add it to the
+  // program
+  poplar::Tensor srcTensor = poplar::concat(srcTensors);
+  poplar::Tensor destTensor = poplar::concat(destTensors);
+  poplar::program::Program program =
+      poplar::program::Copy(srcTensor, destTensor, false, di);
+  poplar::Function function = Context::graph().addFunction(program);
+  value.setMetadata(ExchangeHaloCellsMetadata{function});
+  Context::program().add(poplar::program::Call(function, di));
+  spdlog::trace("Creating new exchange program");
 }
 
 template <DataType Type>
