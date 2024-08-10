@@ -14,6 +14,7 @@ class Solver : public solver::Solver<Type> {
   std::shared_ptr<solver::Solver<Type>> innerSolver_;
 
   SolverStats solveMixedPrecision(Value<Type>& x, Value<Type>& b) const;
+  SolverStats solveSinglePrecision(Value<Type>& x, Value<Type>& b) const;
 
  public:
   Solver(const Matrix<Type>& matrix, std::shared_ptr<Configuration> config)

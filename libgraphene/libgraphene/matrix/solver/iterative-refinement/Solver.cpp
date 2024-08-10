@@ -20,7 +20,7 @@ SolverStats Solver<Type>::solveMixedPrecision(Value<Type>& x,
                                               Value<Type>& b) const {
   GRAPHENE_TRACEPOINT();
   spdlog::debug("Solving with mixed precision iterative refinement");
-  DebugInfo di("GaussSeidelSolver");
+  DebugInfo di("IterativeRefinementSolver");
   auto& program = Context::program();
 
   const Matrix<Type>& A = this->matrix();
@@ -72,6 +72,59 @@ SolverStats Solver<Type>::solveMixedPrecision(Value<Type>& x,
 }
 
 template <DataType Type>
+SolverStats Solver<Type>::solveSinglePrecision(Value<Type>& x,
+                                               Value<Type>& b) const {
+  GRAPHENE_TRACEPOINT();
+  spdlog::debug("Solving with single precision iterative refinement");
+  DebugInfo di("IterativeRefinementSolver");
+  auto& program = Context::program();
+
+  const Matrix<Type>& A = this->matrix();
+  SolverStats stats(name(), config_->norm, A.numTiles());
+
+  // Calculate the norm of b if required
+  if (stats.requiresBNorm(config_->relTolerance))
+    stats.bNorm = A.vectorNorm(config_->norm, b);
+
+  // Calculate the initial residual
+  Value<Type> residual = A.residual(x, b);
+  stats.initialResidual = A.vectorNorm(config_->norm, residual);
+  stats.finalResidual = stats.initialResidual;
+
+  auto terminate =
+      (stats.converged && stats.iterations >= config_->minIterations) ||
+      (stats.iterations >= config_->maxIterations);
+
+  cf::While(!terminate, [&]() {
+    stats.iterations = stats.iterations + 1;
+
+    Value<Type> correction = A.template createUninitializedVector<Type>(true);
+    // Reset the initial guess to zero if the inner solver uses it
+    if (innerSolver_->usesInitialGuess()) correction = 0;
+
+    // Solve the correction
+    innerSolver_->solve(correction, residual);
+
+    // Update the solution
+    x = x + correction;
+
+    // Recalculate the residual
+    residual = A.residual(x, b);
+
+    // Check for convergence
+    stats.finalResidual = A.vectorNorm(config_->norm, residual);
+    stats.checkConvergence(config_->absTolerance, config_->relTolerance,
+                           config_->relResidual);
+
+    if (config_->printPerformanceEachIteration) stats.print();
+  });
+
+  if (config_->printPerformanceAfterSolve) stats.print();
+
+  return stats;
+}
+
+template <DataType Type>
 SolverStats Solver<Type>::solve(Value<Type>& x, Value<Type>& b) {
   GRAPHENE_TRACEPOINT();
 
@@ -86,9 +139,10 @@ SolverStats Solver<Type>::solve(Value<Type>& x, Value<Type>& b) {
   if (!A.isVectorCompatible(b, false, true))
     throw std::runtime_error("b must be vector without halo cells.");
 
-  if (config_->mixedPrecision) return solveMixedPrecision(x, b);
-
-  throw std::runtime_error("Only mixed precision is currently supported.");
+  if (config_->mixedPrecision)
+    return solveMixedPrecision(x, b);
+  else
+    return solveSinglePrecision(x, b);
 }
 
 template class Solver<float>;
