@@ -5,7 +5,9 @@ add_library(GrapheneMatrix SHARED
     "details/MatrixBase.cpp"
     "host/HostMatrix.cpp"
     "host/TileLayout.cpp"
-    "host/formats/Common.cpp"
+    "host/details/CoordinateFormat.cpp"
+    "host/details/Poisson.cpp"
+    "host/details/MatrixMarket.cpp"
     "host/details/HostMatrixBase.cpp"
     "host/details/crs/CRSHostMatrix.cpp"
     "solver/Solver.cpp"
@@ -18,5 +20,7 @@ add_library(GrapheneMatrix SHARED
     "solver/iterative-refinement/Solver.cpp"
     "solver/iterative-refinement/Configuration.cpp"
     "solver/pbicgstab/Solver.cpp"
-    "solver/pbicgstab/Configuration.cpp")
+    "solver/pbicgstab/Configuration.cpp"
+    "solver/restarter/Solver.cpp"
+    "solver/restarter/Configuration.cpp")
 target_link_libraries(GrapheneMatrix PRIVATE GrapheneCommon GrapheneUtil GrapheneDSL nlohmann_json::nlohmann_json fast_matrix_market::fast_matrix_market)
