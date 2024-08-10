@@ -54,6 +54,9 @@ Value<Type> CRSMatrix<Type>::operator*(Value<Type> &x) const {
         offDiagonalCoefficients.tensorOnTile(tile);
     poplar::Tensor resultTile = result.tensorOnTile(tile);
 
+    // If there are no interior and seperator rows on this tile, we can skip
+    if (!diagCoeffsTile.valid()) continue;
+
     // Choose the codelet based on the data types
     std::string className = "graphene::matrix::crs::MatrixVectorMultiply";
     std::string codeletName = poputil::templateVertex(
