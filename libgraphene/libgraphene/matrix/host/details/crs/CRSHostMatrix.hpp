@@ -10,8 +10,8 @@
 #include "libgraphene/dsl/HostValue.hpp"
 #include "libgraphene/dsl/HostValueVariant.hpp"
 #include "libgraphene/matrix/host/TileLayout.hpp"
+#include "libgraphene/matrix/host/details/CoordinateFormat.hpp"
 #include "libgraphene/matrix/host/details/HostMatrixBase.hpp"
-#include "libgraphene/matrix/host/formats/Common.hpp"
 namespace graphene::matrix::host::crs {
 template <DataType Type>
 class CRSHostMatrix : public HostMatrixBase<Type> {
@@ -54,7 +54,7 @@ class CRSHostMatrix : public HostMatrixBase<Type> {
   HostValue<Type> diagValues_;
 
  public:
-  explicit CRSHostMatrix(std::filesystem::path path, size_t numTiles,
+  explicit CRSHostMatrix(TripletMatrix<Type> tripletMatrix, size_t numTiles,
                          std::string name = "matrix");
   CRSHostMatrix(const CRSHostMatrix &other) = delete;
   CRSHostMatrix(CRSHostMatrix &&other) = default;

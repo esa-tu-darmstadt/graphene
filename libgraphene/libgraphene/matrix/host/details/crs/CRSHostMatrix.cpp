@@ -21,7 +21,7 @@
 #include "libgraphene/matrix/details/crs/CRSAddressing.hpp"
 #include "libgraphene/matrix/host/HostMatrix.hpp"
 #include "libgraphene/matrix/host/TileLayout.hpp"
-#include "libgraphene/matrix/host/formats/Common.hpp"
+#include "libgraphene/matrix/host/details/MatrixMarket.hpp"
 #include "libgraphene/util/Tracepoint.hpp"
 
 template <graphene::DataType Type>
@@ -35,8 +35,9 @@ static id_t getEdgeWeight(Type edgeCoeff, Type maxEdgeCoeff,
 // Determines the number of bytes needed to store an unsigned integer value,
 // rounded up to the next power of two.
 constexpr size_t getUnsignedIntegerWidthForValue(size_t value) {
+  if (value == 0) return 0;
   size_t width = 8;  // in bits
-  while ((1 << width) < value) {
+  while ((1UL << width) < value) {
     width *= 2;
   }
   return width / 8;
@@ -80,11 +81,15 @@ void constructHostValue(graphene::HostValueVariant<Types...> &hostValue,
   // Determine the required data type
   size_t maxValue = 0;
   for (auto &tile : data) {
-    maxValue = std::max(maxValue, *std::max_element(tile.begin(), tile.end()));
+    auto maxTileValue = std::max_element(tile.begin(), tile.end());
+    if (maxTileValue != tile.end()) {
+      maxValue = std::max(maxValue, *maxTileValue);
+    }
   }
   size_t width = getUnsignedIntegerWidthForValue(maxValue);
 
   switch (width) {
+    case 0:
     case 1:
       constructHostValueForType<uint8_t>(hostValue, data, name);
       break;
@@ -104,10 +109,9 @@ void constructHostValue(graphene::HostValueVariant<Types...> &hostValue,
 
 namespace graphene::matrix::host::crs {
 template <DataType Type>
-CRSHostMatrix<Type>::CRSHostMatrix(std::filesystem::path path, size_t numTiles,
-                                   std::string name)
+CRSHostMatrix<Type>::CRSHostMatrix(TripletMatrix<Type> tripletMatrix,
+                                   size_t numTiles, std::string name)
     : HostMatrixBase<Type>(numTiles, name) {
-  auto tripletMatrix = loadTripletMatrixFromFile<Type>(path);
   sortTripletMatrx(tripletMatrix);
 
   globalMatrix_ = convertToCRS(std::move(tripletMatrix));
@@ -132,38 +136,47 @@ CRSHostMatrix<Type>::CRSMatrix CRSHostMatrix<Type>::convertToCRS(
   spdlog::info("Converting COO matrix to CRS");
 
   CRSMatrix crs;
+
+  // Copy the diagonal values to the CRS matrix
+  crs.diagValues.resize(tripletMatrix.nrows);
+  for (size_t i = 0; i < tripletMatrix.entries.size(); i++) {
+    if (tripletMatrix.entries[i].row == tripletMatrix.entries[i].col) {
+      crs.diagValues[tripletMatrix.entries[i].row] =
+          tripletMatrix.entries[i].val;
+    }
+  }
+
   crs.addressing.rowPtr.reserve(tripletMatrix.nrows + 1);
   crs.addressing.colInd.reserve(tripletMatrix.entries.size());
   crs.offDiagValues.reserve(tripletMatrix.nrows);
 
   crs.addressing.rowPtr.push_back(0);
 
-  size_t lastOffDiagonalRow = 0;
+  size_t lastRow = 0;
 
   for (size_t i = 0; i < tripletMatrix.entries.size(); i++) {
+    // Ignore diagonal entries
     if (tripletMatrix.entries[i].row == tripletMatrix.entries[i].col) {
-      // Fill missing diagonal entries with zeros
-      while (tripletMatrix.entries[i].row > crs.diagValues.size()) {
-        spdlog::trace(
-            "Row {} has a zero diagonal entry. This decreases the memory "
-            "efficiency of this matrix format.",
-            crs.diagValues.size());
-        crs.diagValues.push_back(0);
-      }
-      crs.diagValues.push_back(tripletMatrix.entries[i].val);
       continue;
     }
 
-    // Increase the rowPtr until we reach the next off-diagonal row
-    while (lastOffDiagonalRow != tripletMatrix.entries[i].row) {
+    // Increase the row pointer if we have moved to the next row
+    while (lastRow != tripletMatrix.entries[i].row) {
       crs.addressing.rowPtr.push_back(crs.addressing.colInd.size());
-      lastOffDiagonalRow++;
+      lastRow++;
     }
 
     crs.addressing.colInd.push_back(tripletMatrix.entries[i].col);
     crs.offDiagValues.push_back(tripletMatrix.entries[i].val);
   }
-  crs.addressing.rowPtr.push_back(crs.addressing.colInd.size());
+
+  // Add the last row pointers. The loop is required if the matrix ends with
+  // rows with no off-diagonal values
+  while (crs.addressing.rowPtr.size() <= tripletMatrix.nrows)
+    crs.addressing.rowPtr.push_back(crs.addressing.colInd.size());
+
+  assert(crs.addressing.rowPtr.size() == tripletMatrix.nrows + 1);
+  assert(crs.diagValues.size() == crs.addressing.rowPtr.size() - 1);
   return crs;
 }
 
@@ -176,7 +189,7 @@ Partitioning CRSHostMatrix<Type>::calculatePartitioning(size_t numTiles,
   Partitioning partitioning;
 
   // number of vertices
-  idx_t nvtxs = crs.diagValues.size();
+  idx_t nvtxs = (idx_t)crs.addressing.rowPtr.size() - 1;
 
   // number of processors
   idx_t nparts = (idx_t)numTiles;
@@ -189,34 +202,40 @@ Partitioning CRSHostMatrix<Type>::calculatePartitioning(size_t numTiles,
   // number of balancing constraints
   idx_t ncon = 1;
 
-  // called rowPtr in CSR
-  // Copy the row pointers to fit the data type expected by METIS
-  std::vector<idx_t> xadj;
+  std::vector<idx_t> xadj;  // rowPtr
   xadj.reserve(crs.addressing.rowPtr.size());
-  std::copy(crs.addressing.rowPtr.begin(), crs.addressing.rowPtr.end(),
-            std::back_inserter(xadj));
-
-  // Called colInd in CSR
-  // Copy the column indices to fit the data type expected by METIS
-  std::vector<idx_t> adjncy;
+  std::vector<idx_t> adjncy;  // colInd
   adjncy.reserve(crs.addressing.colInd.size());
-  std::copy(crs.addressing.colInd.begin(), crs.addressing.colInd.end(),
-            std::back_inserter(adjncy));
-
-  // Calculate edgeWeights
-  std::vector<idx_t> edgeWeights;
+  std::vector<idx_t> edgeWeights;  // edge weights
   edgeWeights.reserve(crs.offDiagValues.size());
+  std::vector<idx_t> vertexWeights;  // vertex weights
+  vertexWeights.reserve(crs.addressing.rowPtr.size() - 1);
 
+  // Find the maximum edge coefficient so that we can scale the edge
+  // weights to integers
   float maxEdgeCoeff = *std::max_element(
       crs.offDiagValues.begin(), crs.offDiagValues.end(),
       [](float a, float b) { return std::abs(a) < std::abs(b); });
   maxEdgeCoeff = abs(maxEdgeCoeff);
   const int maxEdgeWeight = 1000;
 
-  for (size_t i = 0; i < crs.offDiagValues.size(); i++) {
-    edgeWeights.push_back(
-        getEdgeWeight(crs.offDiagValues[i], maxEdgeCoeff, maxEdgeWeight));
+  // We want METIS to balance two constraints:
+  // The storage for the off-diagonal values and the storage for the
+  // diagonal values. We assume that the storage for the diagonal values
+
+  // Construct the adjacency list and edge weights
+  for (size_t i = 0; i < crs.addressing.rowPtr.size() - 1; i++) {
+    size_t numEdges = crs.addressing.rowPtr[i + 1] - crs.addressing.rowPtr[i];
+    xadj.push_back(adjncy.size());
+    vertexWeights.push_back(numEdges + 1);
+    for (size_t j = crs.addressing.rowPtr[i]; j < crs.addressing.rowPtr[i + 1];
+         j++) {
+      adjncy.push_back(crs.addressing.colInd[j]);
+      edgeWeights.push_back(
+          getEdgeWeight(crs.offDiagValues[j], maxEdgeCoeff, maxEdgeWeight));
+    }
   }
+  xadj.push_back(adjncy.size());
 
   //   if (spdlog::get_level() <= spdlog::level::trace)
   //     dumpEdgeWeightStatistics(edgeWeights);
@@ -232,18 +251,22 @@ Partitioning CRSHostMatrix<Type>::calculatePartitioning(size_t numTiles,
   options[METIS_OPTION_NUMBERING] = 0;                // C-style numbering
   options[METIS_OPTION_OBJTYPE] = METIS_OBJTYPE_CUT;  // Minimize edgecut
 
+  // METIS_PartGraphKway may yield inplausible results, for example processors
+  // that are assigned no vertices. METIS_PartGraphRecursive is more robust in
+  // this case.
   if (int error =
-          METIS_PartGraphKway(&nvtxs,         // num vertices in graph
-                              &ncon,          // num balancing constraints
-                              xadj.data(),    // indexing into adjncy
-                              adjncy.data(),  // neighbour info
-                              nullptr,        // vertex wts
-                              nullptr,        // vsize: total communication vol
-                              edgeWeights.data(),  // edge wts
-                              &nparts,             // nParts
-                              nullptr,             // tpwgts
-                              nullptr,  // ubvec: processor imbalance (default)
-                              options, &edgecut, part.data()) != METIS_OK) {
+          METIS_PartGraphRecursive(
+              &nvtxs,                // num vertices in graph
+              &ncon,                 // num balancing constraints
+              xadj.data(),           // indexing into adjncy
+              adjncy.data(),         // neighbour info
+              vertexWeights.data(),  // vertexWeights.data(),  // vertex wts
+              nullptr,               // vsize: total communication vol
+              nullptr,               // edgeWeights.data(),  // edge wts
+              &nparts,               // nParts
+              nullptr,               // tpwgts
+              nullptr,               // ubvec: processor imbalance (default)
+              options, &edgecut, part.data()) != METIS_OK) {
     throw std::runtime_error(
         fmt::format("METIS error {} during "
                     "partitioning",
@@ -292,9 +315,9 @@ std::vector<TileLayout> CRSHostMatrix<Type>::calculateTileLayouts(
     return neighbours;
   };
 
-  // Mutexes for accessing the halo regions of the tiles. This is needed because
-  // due to the parallel execution of the loop below, multiple threads might try
-  // to add halo regions to the same tile at the same time.
+  // Mutexes for accessing the halo regions of the tiles. This is needed
+  // because due to the parallel execution of the loop below, multiple threads
+  // might try to add halo regions to the same tile at the same time.
   std::vector<std::mutex> haloMutexes(numTiles);
 
   // Determine the regions for each tile in parallel
@@ -307,8 +330,8 @@ std::vector<TileLayout> CRSHostMatrix<Type>::calculateTileLayouts(
           if (partitioning.rowToTile[row] == tile.tileId) {
             auto neighbourTileIDs = neighbourTilesOfRow(row);
             if (neighbourTileIDs.empty()) {
-              // This is an interior cell, meaning it is not needed on
-              // any other processor
+              // This is an interior cell, meaning it is not needed
+              // on any other processor
               tile.interiorRows.push_back(row);
             } else {
               // This is a seperator cell
@@ -320,8 +343,9 @@ std::vector<TileLayout> CRSHostMatrix<Type>::calculateTileLayouts(
               // Add it to the halo regions of the neighbour
               // processors
               for (auto neighbourTileID : neighbourTileIDs) {
-                // Lock the neighbour processor's halo mutex because other
-                // threads might also try to add cells to the same halo region
+                // Lock the neighbour processor's halo mutex because
+                // other threads might also try to add cells to the
+                // same halo region
                 std::unique_lock<std::mutex> lock(haloMutexes[neighbourTileID]);
 
                 auto &foreignHaloRegion =
@@ -334,7 +358,8 @@ std::vector<TileLayout> CRSHostMatrix<Type>::calculateTileLayouts(
         }
       });
 
-  // Now that all regions are set, determine the local row to global row mapping
+  // Now that all regions are set, determine the local row to global row
+  // mapping
   std::for_each(std::execution::par, tiles.begin(), tiles.end(),
                 [&](TileLayout &tile) { tile.calculateRowMapping(); });
 
@@ -412,6 +437,14 @@ void CRSHostMatrix<Type>::calculateLocalAddressings() {
         }
         rowPtr.push_back(colInd.size());
 
+        // It is possible that the column indices is empty if a tile has only
+        // isolated rows
+        // In this case, add a dummy "0" to the colInd vector to avoid an
+        // empty vector
+        if (colInd.empty()) {
+          colInd.push_back(0);
+        }
+
         localAddressings_[tile.tileId].rowPtr = rowPtr;
         localAddressings_[tile.tileId].colInd = colInd;
       });
@@ -441,7 +474,7 @@ HostValue<Type> CRSHostMatrix<Type>::decomposeOffDiagCoefficients(
 
   // Decompose and create the tile mapping
   size_t numElements = 0;
-  for (const TileLayout &tile : this->tileLayout_) {
+  for (auto &tile : this->tileLayout_) {
     size_t numElementsOnThisTile = 0;
     const CRSAddressing &localAddressing = localAddressings_[tile.tileId];
     // Iterate over the rows of this tile
@@ -450,12 +483,12 @@ HostValue<Type> CRSHostMatrix<Type>::decomposeOffDiagCoefficients(
       if (tile.isHalo(localRow)) continue;
       size_t globalRow = tile.localToGlobalRow[localRow];
 
-      // Remember that the columns of the local matrix are sorted, so the values
-      // must be sorted by column as well.
+      // Remember that the columns of the local matrix are sorted, so the
+      // values must be sorted by column as well.
 
-      // For this, collect all off-diagonal values of this row as a pair of its
-      // column and value. Then sort them by column and insert them into the
-      // decomposedValues vector.
+      // For this, collect all off-diagonal values of this row as a pair of
+      // its column and value. Then sort them by column and insert them into
+      // the decomposedValues vector.
 
       std::set<std::pair<size_t, Type>> offDiagValues;
       for (size_t i = globalMatrix_.addressing.rowPtr[globalRow];
@@ -470,6 +503,11 @@ HostValue<Type> CRSHostMatrix<Type>::decomposeOffDiagCoefficients(
         decomposedValues.push_back(pair.second);
         numElementsOnThisTile++;
       }
+    }
+    // Add a dummy "0" if the tile has no off-diagonal values
+    if (numElementsOnThisTile == 0) {
+      decomposedValues.push_back(0);
+      numElementsOnThisTile++;
     }
     mapping[tile.tileId].emplace_back(numElements,
                                       numElements + numElementsOnThisTile);
