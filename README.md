@@ -1,5 +1,5 @@
 # Graphene Linear Algebra Framework
-Graphene is a linear algebra framework for for GraphCore IPUs. 
+Graphene is a linear algebra framework for GraphCore IPUs. 
 
 The framework provides a domain-specific language (DSL) for expressing algebraic algorithms. The DSL consists of C++ classes that can be used to express algorithms in a high-level, mathematical way. 
 
