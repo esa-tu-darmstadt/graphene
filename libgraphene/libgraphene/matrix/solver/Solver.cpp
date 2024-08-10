@@ -8,6 +8,7 @@
 #include "libgraphene/matrix/solver/ilu/Solver.hpp"
 #include "libgraphene/matrix/solver/iterative-refinement/Solver.hpp"
 #include "libgraphene/matrix/solver/pbicgstab/Solver.hpp"
+#include "libgraphene/matrix/solver/restarter/Solver.hpp"
 
 namespace graphene::matrix::solver {
 template <DataType Type>
@@ -31,6 +32,9 @@ std::unique_ptr<Solver<Type>> Solver<Type>::createSolver(
   } else if (auto pbicgstabConfig =
                  std::dynamic_pointer_cast<pbicgstab::Configuration>(config)) {
     return std::make_unique<pbicgstab::Solver<Type>>(matrix, pbicgstabConfig);
+  } else if (auto restarterConfig =
+                 std::dynamic_pointer_cast<restarter::Configuration>(config)) {
+    return std::make_unique<restarter::Solver<Type>>(matrix, restarterConfig);
   } else {
     throw std::runtime_error("Unknown solver: " + solverName);
   }

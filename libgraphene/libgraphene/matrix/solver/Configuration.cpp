@@ -9,6 +9,7 @@
 #include "libgraphene/matrix/solver/ilu/Configuration.hpp"
 #include "libgraphene/matrix/solver/iterative-refinement/Configuration.hpp"
 #include "libgraphene/matrix/solver/pbicgstab/Configuration.hpp"
+#include "libgraphene/matrix/solver/restarter/Configuration.hpp"
 
 namespace graphene::matrix::solver {
 template <>
@@ -62,6 +63,8 @@ std::shared_ptr<Configuration> Configuration::fromJSON(
     return std::make_shared<ilu::Configuration>(config);
   } else if (solver == "PBiCGStab") {
     return std::make_shared<pbicgstab::Configuration>(config);
+  } else if (solver == "restarter") {
+    return std::make_shared<restarter::Configuration>(config);
   } else {
     throw std::runtime_error("Unknown solver: " + solver);
   }
