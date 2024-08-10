@@ -1,0 +1,22 @@
+// Configuration file to be used with the benchmark application.
+// Usage: benchmark --config=<path_to_this_file> --tiles=<number_of_tiles> --matrix=<path_to_matrix>
+// Instead of --matrix, you can use --poisson=<nx>,<ny>,<nz> to generate a 3D 7-point Poisson problem.
+{
+    "x": 1.0, // The final solution for which b is calculated
+    "x0": 0.0, // The initial guess
+    "benchmark": "solve",
+    "solver": {
+        "type": "restarter",
+        "maxRestarts": 1000,
+        "innerSolver": {
+            "type": "PBiCGStab",
+            "maxIterations": 100,
+            "printPerformanceEachIteration": true,
+            // "printPerformanceAfterSolve": true,
+            "preconditioner": {
+                "type": "ILU",
+                "diagonalBased": false
+            }
+        }
+    }
+}

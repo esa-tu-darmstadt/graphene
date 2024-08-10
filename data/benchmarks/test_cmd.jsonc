@@ -1,25 +1,26 @@
 {
-    "tiles": 1000,
-    "profileDirectory": "test/",
-    "matrix": "../matrices/G3_circuit/G3_circuit.mtx",
+    "tiles": 1472,
+    "profileDirectory": "test_cmd/",
+    "matrix": "../matrices/StocF-1465/StocF-1465.mtx",
     "x0": 0.0,
+    // "b": "../matrices/bundle_adj/bundle_adj_b.mtx",
     "b": 1.0,
     "benchmark": "solve",
     "solver": {
         "type": "IterativeRefinement",
-        "relResidual": 1e-3,
-        "maxIterations": 100000,
+        "relResidual": 1e-9,
+        "maxIterations": 1000,
         "mixedPrecision": true,
         "printPerformanceAfterSolve": true,
         "innerSolver": {
             "type": "PBiCGStab",
-            "verbose": true,
-            "maxIterations": 200,
-            "printPerformanceEachIteration": true,
+            "verbose": false,
+            "maxIterations": 5,
+            // "printPerformanceEachIteration": true,
             "printPerformanceAfterSolve": true,
             "preconditioner": {
                 "type": "ILU",
-                "diagonalBased": true
+                "diagonalBased": false
             }
         },
         // "innerSolver": {

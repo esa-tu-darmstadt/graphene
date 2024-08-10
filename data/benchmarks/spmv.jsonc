@@ -1,0 +1,9 @@
+// Configuration file to be used with the benchmark application.
+// Usage: benchmark --config=<path_to_this_file> --tiles=<number_of_tiles> --matrix=<path_to_matrix> 
+// Instead of --matrix, you can use --poisson=<nx>,<ny>,<nz> to generate a 3D 7-point Poisson problem.
+{
+    "profileDirectory": "spmv_%matrix%_%tiles%/",
+    "x": 1.0, // The final solution for which b is calculated
+    "x0": 0.0, // The initial guess
+    "benchmark": "spmv"
+}

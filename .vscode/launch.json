@@ -19,7 +19,11 @@
             "name": "Debug benchmark",
             "program": "${workspaceFolder}/build/applications/benchmark/benchmark",
             "args": [
-                "data/benchmarks/test.jsonc"
+                "data/benchmarks/restarter_pbicgstab_ilu0_verbose.jsonc",
+                "-t1472",
+                // "-dprofiling/",
+                // "-mdata/matrices/laplacian_8x8x8/A.mtx",
+                "-p150,150,150"
             ],
             "env": {},
             "cwd": "${workspaceFolder}"
