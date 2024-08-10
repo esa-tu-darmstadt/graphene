@@ -7,9 +7,18 @@
 #include "libgraphene/common/Concepts.hpp"
 
 namespace graphene {
+
 template <DataType Type>
 class Value;
 
+/**
+ * @brief A class representing a tensor stored in remote buffers.
+ *
+ * This class manages remote buffers and their mappings to tiles on an IPU.
+ * It provides functionality to copy the remote value to a tile.
+ *
+ * @tparam Type The data type of the remote value.
+ */
 template <DataType Type>
 class RemoteValue {
   // One remote buffer per IPU
@@ -19,7 +28,21 @@ class RemoteValue {
   std::string debugStr_;
 
  public:
+  /**
+   * @brief Deleted default constructor to prevent instantiation without
+   * parameters.
+   */
   RemoteValue() = delete;
+
+  /**
+   * @brief Constructs a RemoteValue with the given buffers, tile mapping,
+   * shape, and debug string.
+   *
+   * @param buffers A vector of remote buffers.
+   * @param tileMapping The mapping of tiles to tensors.
+   * @param shape The shape of the remote value.
+   * @param debugStr A debug string for logging and debugging purposes.
+   */
   explicit RemoteValue(std::vector<poplar::RemoteBuffer> buffers,
                        poplar::Graph::TileToTensorMapping tileMapping,
                        std::vector<size_t> shape, std::string debugStr)
@@ -28,6 +51,12 @@ class RemoteValue {
         shape_(std::move(shape)),
         debugStr_(std::move(debugStr)) {}
 
+  /**
+   * @brief Copies the remote value to tile memory.
+   *
+   * @return A Value object representing the copied value in tile memory.
+   */
   Value<Type> copyToTile() const;
 };
+
 }  // namespace graphene

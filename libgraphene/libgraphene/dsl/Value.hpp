@@ -93,7 +93,7 @@ class Value : public Expression<Type> {
     requires PoplarNativeType<Type>;
 
   /**
-   * @brief Get the underlying tensor.
+   * @brief Get the underlying poplar tensor.
    *
    * @param flattenIfScalar If true, flatten the tensor if it's scalar.
    * @return poplar::Tensor The underlying tensor.
@@ -101,7 +101,8 @@ class Value : public Expression<Type> {
   poplar::Tensor tensor(bool flattenIfScalar = false) const;
 
   /**
-   * @brief Get the slice of the underlying tensor mapped to the given tile.
+   * @brief Get the slice of the underlying poplar tensor mapped to the given
+   * tile.
    *
    * @param tile The tile to get the tensor on.
    * @param flattenIfScalar If true, flatten the tensor if it's scalar.

@@ -3,10 +3,7 @@
 #include <poplar/Graph.hpp>
 
 namespace graphene::matrix {
-class Addressing {
- public:
-  poplar::Graph::TileToTensorMapping getVectorMapping(
-      bool withHalo = false) const;
-  std::vector<size_t> getVectorShape(bool withHalo = false) const;
-};
+/** A base class for the addresing of a matrix. May well be removed in the
+ * future. */
+class Addressing {};
 }  // namespace graphene::matrix

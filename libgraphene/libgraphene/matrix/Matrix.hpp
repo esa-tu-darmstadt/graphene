@@ -43,6 +43,17 @@ class Matrix {
     return static_cast<T &>(*pimpl_);
   }
 
+  /**
+   * Solves a linear system of equations.
+   *
+   * This function solves a linear system of equations represented by the
+   * equation Ax = b, where A is a matrix, x is the solution vector, and b is
+   * the right-hand side vector.
+   *
+   * @param x The solution vector, which will be modified by this function.
+   * @param b The right-hand side vector.
+   * @param config The configuration for the solver.
+   */
   void solve(Value<Type> &x, Value<Type> &b,
              std::shared_ptr<solver::Configuration> &config);
 
@@ -69,6 +80,14 @@ class Matrix {
   }
 
   template <typename VectorType>
+  /**
+   * Creates a \ref Value object with the correct shape and tile mapping for a
+   * vector that is compatible with the matrix. The vector is uninitialized.
+   *
+   * @param withHalo A boolean indicating whether to include halo elements in
+   * the vector.
+   * @return An uninitialized vector of type VectorType.
+   */
   Value<VectorType> createUninitializedVector(bool withHalo) const {
     return pimpl_->template createUninitializedVector<VectorType>(withHalo);
   }
@@ -90,13 +109,26 @@ class Matrix {
     return pimpl_->isVectorCompatible(value, withHalo, tileMappingMustMatch);
   }
 
+  /**
+   * Returns a constant reference to the underlying host matrix.
+   */
   const host::HostMatrix<Type> &hostMatrix() const {
     return pimpl_->hostMatrix;
   }
+
+  /**
+   * Returns a reference to the underlying host matrix.
+   */
   host::HostMatrix<Type> &hostMatrix() { return pimpl_->hostMatrix; }
 
+  /**
+   * Returns the number of tiles the matrix is distributed over.
+   */
   size_t numTiles() const { return pimpl_->numTiles(); }
 
+  /**
+   * Retrieves the format of the matrix.
+   */
   MatrixFormat getFormat() const { return pimpl_->getFormat(); }
 };
 
