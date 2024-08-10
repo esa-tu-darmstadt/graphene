@@ -3,7 +3,7 @@
 #include "libgraphene/common/Concepts.hpp"
 #include "libgraphene/matrix/MatrixFormat.hpp"
 #include "libgraphene/matrix/host/TileLayout.hpp"
-#include "libgraphene/matrix/host/formats/Common.hpp"
+#include "libgraphene/matrix/host/details/MatrixMarket.hpp"
 namespace graphene::matrix {
 template <DataType Type>
 class Matrix;

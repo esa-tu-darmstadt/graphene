@@ -1,6 +1,8 @@
 #pragma once
 
+#include "libgraphene/matrix/MatrixFormat.hpp"
 #include "libgraphene/matrix/host/details/HostMatrixBase.hpp"
+#include "libgraphene/matrix/host/details/MatrixMarket.hpp"
 namespace graphene::matrix::host {
 /** Represents a matrix in host memory. */
 template <DataType Type>
@@ -9,6 +11,9 @@ class HostMatrix {
 
  public:
   HostMatrix() = default;
+
+  HostMatrix(MatrixFormat format, TripletMatrix<Type> tripletMatrix,
+             size_t numTiles, std::string name = "matrix");
 
   template <typename Impl>
   HostMatrix(std::shared_ptr<Impl> impl) : pimpl(std::move(impl)) {}
@@ -57,5 +62,10 @@ HostValue<Type> loadVectorFromFile(std::filesystem::path path,
                                    const HostMatrix<Type> &matrix,
                                    bool withHalo = false,
                                    std::string name = "vector");
+
+template <DataType Type>
+HostMatrix<Type> generate3DPoissonMatrix(
+    size_t nx, size_t ny, size_t nz, size_t numTiles,
+    MatrixFormat format = MatrixFormat::CRS, std::string name = "poisson");
 
 }  // namespace graphene::matrix::host
