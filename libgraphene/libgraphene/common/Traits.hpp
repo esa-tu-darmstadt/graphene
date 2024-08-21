@@ -27,6 +27,13 @@ struct Traits<float> {
 };
 template <>
 struct Traits<double> {
+  static double inline zero() { return 0.0; };
+  static double inline one() { return 1.0; };
+  static constexpr poplar::Type &PoplarType = poplar::LONGLONG;
+  using PoplarHostType = signed long long;
+};
+template <>
+struct Traits<doubleword> {
   static twofloat::two<float> inline zero() { return {0.0f, 0.0f}; };
   static twofloat::two<float> inline one() { return {1.0f, 0.0f}; };
   static constexpr poplar::Type &PoplarType = poplar::LONGLONG;
@@ -90,11 +97,12 @@ auto inline toPoplarHostType(Type val)
   return val;
 }
 
+auto inline toPoplarHostType(doubleword val) {
+  return *reinterpret_cast<long long *>(&val);
+}
+
 auto inline toPoplarHostType(double val) {
-  float x = (float)val;
-  float y = (float)(val - x);
-  twofloat::two<float> twoFloat{x, y};
-  return *reinterpret_cast<long long *>(&twoFloat);
+  return *reinterpret_cast<long long *>(&val);
 }
 
 }  // namespace graphene

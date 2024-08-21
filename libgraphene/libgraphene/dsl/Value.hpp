@@ -51,6 +51,7 @@ class Value : public Expression<Type> {
   explicit Value(Type value, std::string name = "");
 
   /**
+   * @brief Constructs a mutable tensor from a list of values.
    */
   explicit Value(std::initializer_list<Type> values,
                  std::vector<size_t> shape = {}, TileMapping tileMapping = {},
@@ -168,9 +169,28 @@ class Value : public Expression<Type> {
    */
   template <typename DestType>
   Value<DestType> cast() const
+    requires std::is_same_v<Type, doubleword> && std::is_same_v<DestType, float>
+  ;
+
+  /** @brief Casts a double precision type to a single precision float type.
+   *
+   * @return Expression<float> The casted expression.
+   */
+  template <typename DestType>
+  Value<DestType> cast() const
     requires std::is_same_v<Type, double> && std::is_same_v<DestType, float>;
 
   /** @brief Casts a single precision float type to a double word type.
+   * type.
+   *
+   * @return Expression<float> The casted expression.
+   */
+  template <typename DestType>
+  Value<DestType> cast() const
+    requires std::is_same_v<Type, float> && std::is_same_v<DestType, doubleword>
+  ;
+
+  /** @brief Casts a single precision float type to a double precision type.
    * type.
    *
    * @return Expression<float> The casted expression.
@@ -216,6 +236,6 @@ class Value : public Expression<Type> {
  * tensor uses the long long format, which stores both floating point words
  * in a single element. This functions adds one dimension of size 2 in which
  * it stores the upper and lower floating point words seperatly. */
-Value<float> unrollDoubleWordValue(const Value<double> &value);
+Value<float> unrollDoubleWordValue(const Value<doubleword> &value);
 
 }  // namespace graphene

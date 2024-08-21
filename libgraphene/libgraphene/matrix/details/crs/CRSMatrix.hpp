@@ -57,13 +57,24 @@ struct CRSMatrix : public MatrixBase<Type> {
                        bool withHalo = false) const override;
 
   /**
-   * @brief Compute the residual of the matrix equation with mixed precision.
+   * @brief Compute the mixed-precision residual.
    *
-   * @param x The solution vector with double precision.
+   * @param x The solution vector in double precision.
    * @param b The right-hand side vector with float precision.
    * @return Value<float> The residual vector with float precision.
    */
+
   Value<float> residual(Value<double> &x, const Value<float> &b) const override;
+
+  /**
+   * @brief Compute the mixed-precision residual.
+   *
+   * @param x The solution vector in double word arithmetic.
+   * @param b The right-hand side vector with float precision.
+   * @return Value<float> The residual vector with float precision.
+   */
+  Value<float> residual(Value<doubleword> &x,
+                        const Value<float> &b) const override;
 };
 
 }  // namespace graphene::matrix::crs

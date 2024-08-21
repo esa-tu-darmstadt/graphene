@@ -186,6 +186,14 @@ Value<VectorType> MatrixBase<Type>::createUninitializedVector(
 INSTANTIATE(float)
 
 // Additionally, instantiate the template for mixed precision
+template void MatrixBase<float>::exchangeHaloCells(
+    Value<doubleword> &value) const;
+template bool MatrixBase<float>::isVectorCompatible(
+    const Value<doubleword> &value, bool withHalo,
+    bool tileMappingMustMatch) const;
+template Value<doubleword> MatrixBase<float>::stripHaloCellsFromVector(
+    const Value<doubleword> &x) const;
+// Additionally, instantiate the template for mixed precision
 template void MatrixBase<float>::exchangeHaloCells(Value<double> &value) const;
 template bool MatrixBase<float>::isVectorCompatible(
     const Value<double> &value, bool withHalo, bool tileMappingMustMatch) const;

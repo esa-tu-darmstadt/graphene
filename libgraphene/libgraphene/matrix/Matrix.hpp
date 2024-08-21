@@ -63,6 +63,13 @@ class Matrix {
   }
 
   /** Computes the mixed-precision residual. */
+  Value<float> residual(Value<doubleword> &x, const Value<float> &b) const
+    requires std::is_same_v<Type, float>
+  {
+    return pimpl_->residual(x, b);
+  }
+
+  /** Computes the mixed-precision residual. */
   Value<float> residual(Value<double> &x, const Value<float> &b) const
     requires std::is_same_v<Type, float>
   {

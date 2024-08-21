@@ -15,6 +15,13 @@
 #include "libgraphene/util/Tracepoint.hpp"
 
 namespace graphene::matrix::solver::restarter {
+template <DataType Type>
+Solver<Type>::Solver(const Matrix<Type>& matrix,
+                     std::shared_ptr<Configuration> config)
+    : solver::Solver<Type>(matrix),
+      config_(std::move(config)),
+      innerSolver_(solver::Solver<Type>::createSolver(this->matrix(),
+                                                      config_->innerSolver)) {}
 
 template <DataType Type>
 SolverStats Solver<Type>::solve(Value<Type>& x, Value<Type>& b) {
@@ -23,10 +30,6 @@ SolverStats Solver<Type>::solve(Value<Type>& x, Value<Type>& b) {
 
   spdlog::trace("Building restarter for solver {} with {} restarts",
                 config_->innerSolver->solverName(), config_->maxRestarts);
-
-  if (!innerSolver_)
-    innerSolver_ = solver::Solver<Type>::createSolver(this->matrix(),
-                                                      config_->innerSolver);
 
   Value<int> iterations(1);
   SolverStats stats = innerSolver_->solve(x, b);

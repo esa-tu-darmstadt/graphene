@@ -84,6 +84,23 @@ struct binary_op_return_type<popops::expr::BinaryOpType::NOT_EQUAL, T1, T2> {
 
 // Specializations for double word arithmetic
 template <>
+struct binary_op_return_type<popops::expr::BinaryOpType::ADD, doubleword,
+                             float> {
+  using type = doubleword;
+};
+template <>
+struct binary_op_return_type<popops::expr::BinaryOpType::ADD, float,
+                             doubleword> {
+  using type = doubleword;
+};
+template <>
+struct binary_op_return_type<popops::expr::BinaryOpType::ADD, doubleword,
+                             doubleword> {
+  using type = doubleword;
+};
+
+// Specializations for double precision arithmetic
+template <>
 struct binary_op_return_type<popops::expr::BinaryOpType::ADD, double, float> {
   using type = double;
 };

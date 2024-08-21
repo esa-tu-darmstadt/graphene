@@ -52,8 +52,21 @@ struct MatrixBase {
    * @param b The right-hand side vector with float precision.
    * @return Value<float> The residual vector with float precision.
    */
-  virtual Value<float> residual(Value<double> &x,
-                                const Value<float> &b) const = 0;
+  virtual Value<float> residual(Value<doubleword> &x,
+                                const Value<float> &b) const {
+    throw std::runtime_error("Not implemented for this type");
+  }
+
+  /**
+   * @brief Compute the residual of the matrix equation with mixed precision.
+   *
+   * @param x The solution vector with double precision.
+   * @param b The right-hand side vector with float precision.
+   * @return Value<float> The residual vector with float precision.
+   */
+  virtual Value<float> residual(Value<double> &x, const Value<float> &b) const {
+    throw std::runtime_error("Not implemented for this type");
+  }
 
   /**
    * @brief Multiply the matrix by a vector.

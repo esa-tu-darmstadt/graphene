@@ -18,12 +18,18 @@ namespace graphene::matrix::solver::pbicgstab {
   }
 
 template <DataType Type>
-SolverStats Solver<Type>::solve(Value<Type>& x, Value<Type>& b) {
-  GRAPHENE_TRACEPOINT();
-
-  if (config_->preconditioner && !preconditioner_)
+Solver<Type>::Solver(const Matrix<Type>& matrix,
+                     std::shared_ptr<Configuration> config)
+    : solver::Solver<Type>(matrix), config_(std::move(config)) {
+  spdlog::debug("Creating PBiCGStab solver");
+  if (config_->preconditioner)
     preconditioner_ = solver::Solver<Type>::createSolver(
         this->matrix(), config_->preconditioner);
+}
+
+template <DataType Type>
+SolverStats Solver<Type>::solve(Value<Type>& x, Value<Type>& b) {
+  GRAPHENE_TRACEPOINT();
 
   const Matrix<Type>& A = this->matrix();
   if (!A.isVectorCompatible(x, true, true))

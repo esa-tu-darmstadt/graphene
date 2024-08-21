@@ -74,6 +74,7 @@ void materializeExpression(const Expression<Type> &expr, Value<Type> &value) {
   if (auto *constExpr = e.getAs<popops::expr::Const>()) {
     // popops cannot infere the type of a constant, so we need to handle it
     // manually
+    // TODO: Maybe we can use map() here by passing constTypes
     Type constVal = *reinterpret_cast<Type *>(constExpr->getData());
     auto &graph = Context::graph();
 
@@ -93,6 +94,8 @@ void materializeExpression(const Expression<Type> &expr, Value<Type> &value) {
     Context::program().add(
         poplar::program::Copy(constTensor, value.tensor(), false, di));
   } else {
+    // popops::outputGeneratedCodelet(Context::graph().getTarget(), expr.expr(),
+    //                                expr.placeholders(), {}, std::cout);
     // Let popops do its magic to materialize the expression
     popops::mapWithOutput(Context::graph(), expr.expr(), expr.placeholders(),
                           value.tensor(), Context::program(), di);
@@ -149,6 +152,7 @@ size_t Expression<T>::numElements() const {
 
 INSTANTIATE_NATIVE_TYPE(float)
 INSTANTIATE_NON_NATIVE_TYPE(double)
+INSTANTIATE_NON_NATIVE_TYPE(doubleword)
 INSTANTIATE_NATIVE_TYPE(bool)
 INSTANTIATE_NATIVE_TYPE(uint8_t)
 INSTANTIATE_NATIVE_TYPE(int8_t)

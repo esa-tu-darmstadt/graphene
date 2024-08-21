@@ -80,6 +80,16 @@ concept TwoFloatTypeOrValue =
     (is_value_v<T> && TwoFloatType<typename unwrap_expression<T>::type>);
 
 /**
+ * @brief Concept to check if a type is a double precision type or an \ref
+ * Expression of such.
+ * @tparam T The type to check.
+ */
+template <typename T>
+concept DoublePrecisionTypeOrValue =
+    DoublePrecisionType<T> ||
+    (is_value_v<T> && DoublePrecisionType<typename unwrap_expression<T>::type>);
+
+/**
  * @brief Concept to check if a type is a \ref DataType type or an \ref
  * Expression of such.
  * @tparam T The type to check.
@@ -101,6 +111,10 @@ concept AtLeastOneExpression =
 template <typename T1, typename T2>
 concept AtLeastOneTwoFloatTypeOrValue =
     (TwoFloatTypeOrValue<T1> || TwoFloatTypeOrValue<T2>);
+
+template <typename T1, typename T2>
+concept AtLeastOneDoublePrecisionTypeOrValue =
+    (DoublePrecisionTypeOrValue<T1> || DoublePrecisionTypeOrValue<T2>);
 
 /**
  * @brief Concept to ensure at least one operand is an Value, the other

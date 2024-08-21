@@ -21,6 +21,7 @@ struct Configuration : solver::Configuration,
 
   std::shared_ptr<solver::Configuration> innerSolver;
   bool mixedPrecision = false;
+  bool useDoubleWordArithmetic = false;
 
   Configuration() = default;
   Configuration(nlohmann::json const& config);

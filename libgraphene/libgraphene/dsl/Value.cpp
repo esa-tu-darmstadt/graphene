@@ -169,7 +169,7 @@ void Value<Type>::print(std::string name, poplar::PrintTensorFmt fmt) const {
 
   poplar::Tensor unrolledTensor = tensor();
   if constexpr (std::is_same_v<Type, double>) {
-    auto unrolledValue = unrollDoubleWordValue(*this);
+    auto unrolledValue = unrollTwoFloatValue(*this);
     unrolledTensor = unrolledValue.tensor();
   }
 
@@ -243,7 +243,7 @@ Expression<Type> Value<Type>::norm(VectorNorm type) const
   }
 }
 
-Value<float> unrollDoubleWordValue(const Value<double> &value) {
+Value<float> unrollTwoFloatValue(const Value<double> &value) {
   GRAPHENE_TRACEPOINT();
   DebugInfo di("Value", DI_ARGS(value.tensor()));
   auto &graph = Context::graph();
@@ -290,7 +290,7 @@ Value<float> unrollDoubleWordValue(const Value<double> &value) {
 template <DataType Type>
 template <typename DestType>
 Value<DestType> Value<Type>::cast() const
-  requires std::is_same_v<Type, double> && std::is_same_v<DestType, float>
+  requires std::is_same_v<Type, doubleword> && std::is_same_v<DestType, float>
 {
   GRAPHENE_TRACEPOINT();
   DebugInfo di("Value", DI_ARGS(tensor()));
@@ -325,7 +325,7 @@ Value<DestType> Value<Type>::cast() const
 template <DataType Type>
 template <typename DestType>
 Value<DestType> Value<Type>::cast() const
-  requires std::is_same_v<Type, float> && std::is_same_v<DestType, double>
+  requires std::is_same_v<Type, float> && std::is_same_v<DestType, doubleword>
 {
   GRAPHENE_TRACEPOINT();
   DebugInfo di("Value", DI_ARGS(tensor()));
@@ -333,7 +333,7 @@ Value<DestType> Value<Type>::cast() const
   auto &graph = Context::graph();
   auto &program = Context::program();
 
-  Value<double> casted(this->shape(), this->tileMapping());
+  Value<doubleword> casted(this->shape(), this->tileMapping());
 
   poplar::ComputeSet cs = graph.addComputeSet(di);
   for (size_t tile = 0; tile < tileMapping().size(); ++tile) {
@@ -358,11 +358,83 @@ Value<DestType> Value<Type>::cast() const
   return casted;
 }
 
+template <DataType Type>
+template <typename DestType>
+Value<DestType> Value<Type>::cast() const
+  requires std::is_same_v<Type, double> && std::is_same_v<DestType, float>
+{
+  GRAPHENE_TRACEPOINT();
+  DebugInfo di("Value", DI_ARGS(tensor()));
+
+  auto &graph = Context::graph();
+  auto &program = Context::program();
+
+  Value<float> casted(this->shape(), this->tileMapping());
+
+  poplar::ComputeSet cs = graph.addComputeSet(di);
+  for (size_t tile = 0; tile < tileMapping().size(); ++tile) {
+    if (tileMapping()[tile].empty()) continue;
+
+    // FIXME: Use flattenToVector
+    poplar::Tensor tileTensor = tensorOnTile(tile).flatten();
+    poplar::Tensor castedTileTensor = casted.tensorOnTile(tile).flatten();
+
+    std::string codeletName = poputil::templateVertex(
+        "graphene::ops::CastDoublePrecisionToFloatVertex");
+    poplar::VertexRef v = graph.addVertex(cs, codeletName);
+
+    graph.connect(v["in"], tileTensor);
+    graph.connect(v["out"], castedTileTensor);
+    graph.setPerfEstimate(v, tileTensor.numElements() * 3 + 100);
+    graph.setTileMapping(v, tile);
+  }
+
+  program.add(poplar::program::Execute(cs, di));
+
+  return casted;
+}
+template <DataType Type>
+template <typename DestType>
+Value<DestType> Value<Type>::cast() const
+  requires std::is_same_v<Type, float> && std::is_same_v<DestType, double>
+{
+  GRAPHENE_TRACEPOINT();
+  DebugInfo di("Value", DI_ARGS(tensor()));
+
+  auto &graph = Context::graph();
+  auto &program = Context::program();
+
+  Value<double> casted(this->shape(), this->tileMapping());
+
+  poplar::ComputeSet cs = graph.addComputeSet(di);
+  for (size_t tile = 0; tile < tileMapping().size(); ++tile) {
+    if (tileMapping()[tile].empty()) continue;
+
+    // FIXME: Use flattenToVector
+    poplar::Tensor tileTensor = tensorOnTile(tile).flatten();
+    poplar::Tensor castedTileTensor = casted.tensorOnTile(tile).flatten();
+
+    std::string codeletName = poputil::templateVertex(
+        "graphene::ops::CastFloatToDoublePrecisionVertex");
+    poplar::VertexRef v = graph.addVertex(cs, codeletName);
+
+    graph.connect(v["in"], tileTensor);
+    graph.connect(v["out"], castedTileTensor);
+    graph.setPerfEstimate(v, tileTensor.numElements() * 3 + 100);
+    graph.setTileMapping(v, tile);
+  }
+
+  program.add(poplar::program::Execute(cs, di));
+
+  return casted;
+}
+
 // Explicit instantiation
 #define INSTANTIATE(T) template class Value<T>;
 
 INSTANTIATE(float)
 INSTANTIATE(double)
+INSTANTIATE(doubleword)
 INSTANTIATE(bool)
 INSTANTIATE(uint8_t)
 INSTANTIATE(int8_t)
@@ -374,6 +446,9 @@ INSTANTIATE(int32_t)
 
 // Instantiate the cast methods from double to float and vice versa
 #define INSTANTIATE(T, U) template Value<U> Value<T>::cast<U>() const;
+
+INSTANTIATE(doubleword, float)
+INSTANTIATE(float, doubleword)
 
 INSTANTIATE(double, float)
 INSTANTIATE(float, double)

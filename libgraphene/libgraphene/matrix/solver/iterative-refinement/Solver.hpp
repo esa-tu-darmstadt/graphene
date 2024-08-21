@@ -13,12 +13,12 @@ class Solver : public solver::Solver<Type> {
   std::shared_ptr<Configuration> config_;
   std::shared_ptr<solver::Solver<Type>> innerSolver_;
 
+  template <DataType ExtendedPrecisionType>
   SolverStats solveMixedPrecision(Value<Type>& x, Value<Type>& b) const;
   SolverStats solveSinglePrecision(Value<Type>& x, Value<Type>& b) const;
 
  public:
-  Solver(const Matrix<Type>& matrix, std::shared_ptr<Configuration> config)
-      : solver::Solver<Type>(matrix), config_(std::move(config)) {}
+  Solver(const Matrix<Type>& matrix, std::shared_ptr<Configuration> config);
 
   SolverStats solve(Value<Type>& x, Value<Type>& b) override;
 

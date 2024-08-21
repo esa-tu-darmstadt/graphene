@@ -240,6 +240,56 @@ auto Add(const T1 &lhs, const T2 &rhs) {
   Context::program().add(poplar::program::Execute(cs, di));
   return outValue;
 }
+
+template <DataTypeOrValue T1, DataTypeOrValue T2>
+  requires AtLeastOneValue<T1, T2> &&
+           AtLeastOneDoublePrecisionTypeOrValue<T1, T2> &&
+           CompatibleTypesForBinaryOp<popops::expr::BinaryOpType::ADD, T1, T2>
+auto Add(const T1 &lhs, const T2 &rhs) {
+  // When a Value<Type> is passed, the type is a **const reference** to the
+  // Value. When a DataType is passed, the type is Value<Type>.
+  decltype(detail::wrapInValue(lhs)) lhsValue = detail::wrapInValue(lhs);
+  decltype(detail::wrapInValue(rhs)) rhsValue = detail::wrapInValue(rhs);
+
+  std::optional<std::vector<size_t>> outShape =
+      detail::broadcastShapes(lhsValue.shape(), rhsValue.shape());
+  if (!outShape) throw std::runtime_error("Shapes are not compatible");
+
+  using LeftType = typename unwrap_expression<T1>::type;
+  using RightType = typename unwrap_expression<T2>::type;
+  using ResultType = binary_op_return_type<popops::expr::BinaryOpType::ADD,
+                                           LeftType, RightType>::type;
+
+  auto &graph = Context::graph();
+
+  // FIXME: Get the broadcasted tile mapping
+  poplar::Graph::TileToTensorMapping outMapping = lhsValue.tileMapping();
+  Value<ResultType> outValue(*outShape, outMapping);
+
+  std::string codeletName = poputil::templateVertex(
+      "graphene::ops::AddDoublePrecision", lhsValue.tensor().elementType(),
+      rhsValue.tensor().elementType(), outValue.tensor().elementType());
+
+  DebugInfo di("DoublePrecision");
+  poplar::ComputeSet cs = graph.addComputeSet(di);
+  for (size_t tile = 0; tile < outMapping.size(); ++tile) {
+    if (outMapping[tile].empty()) continue;
+    // FIXME: Flatten to vector
+    poplar::Tensor lhsTileTensor = lhsValue.tensorOnTile(tile);
+    poplar::Tensor rhsTileTensor = rhsValue.tensorOnTile(tile);
+    poplar::Tensor outTileTensor = outValue.tensorOnTile(tile);
+
+    poplar::VertexRef vertex = graph.addVertex(cs, codeletName);
+    graph.setTileMapping(vertex, tile);
+    graph.connect(vertex["lhs"], lhsTileTensor);
+    graph.connect(vertex["rhs"], rhsTileTensor);
+    graph.connect(vertex["out"], outTileTensor);
+    graph.setPerfEstimate(vertex, outTileTensor.numElements() * 15 + 100);
+  }
+
+  Context::program().add(poplar::program::Execute(cs, di));
+  return outValue;
+}
 }  // namespace ops
 
 }  // namespace graphene

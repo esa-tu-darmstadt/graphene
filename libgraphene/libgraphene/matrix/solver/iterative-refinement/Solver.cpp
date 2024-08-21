@@ -4,6 +4,7 @@
 
 #include <poputil/VertexTemplates.hpp>
 
+#include "libgraphene/common/Concepts.hpp"
 #include "libgraphene/dsl/ControlFlow.hpp"
 #include "libgraphene/dsl/Operators.hpp"
 #include "libgraphene/matrix/Matrix.hpp"
@@ -13,9 +14,21 @@
 #include "libgraphene/util/DebugInfo.hpp"
 #include "libgraphene/util/Tracepoint.hpp"
 
+namespace {
+template <typename T>
+struct double_of {};
+template <>
+struct double_of<float> {
+  using type = double;
+};
+template <typename T>
+using double_of_v = typename double_of<T>::type;
+}  // namespace
+
 namespace graphene::matrix::solver::iterativerefinement {
 
 template <DataType Type>
+template <DataType ExtendedPrecisionType>
 SolverStats Solver<Type>::solveMixedPrecision(Value<Type>& x,
                                               Value<Type>& b) const {
   GRAPHENE_TRACEPOINT();
@@ -36,7 +49,8 @@ SolverStats Solver<Type>::solveMixedPrecision(Value<Type>& x,
   stats.finalResidual = stats.initialResidual;
 
   // Create a double precision vector
-  Value<double> xDouble = x.template cast<double>();
+  Value<ExtendedPrecisionType> xDouble =
+      x.template cast<ExtendedPrecisionType>();
 
   auto terminate =
       (stats.converged && stats.iterations >= config_->minIterations) ||
@@ -64,7 +78,7 @@ SolverStats Solver<Type>::solveMixedPrecision(Value<Type>& x,
 
     if (config_->printPerformanceEachIteration) stats.print();
   });
-  x = xDouble.cast<float>();
+  x = xDouble.template cast<Type>();
 
   if (config_->printPerformanceAfterSolve) stats.print();
 
@@ -128,10 +142,6 @@ template <DataType Type>
 SolverStats Solver<Type>::solve(Value<Type>& x, Value<Type>& b) {
   GRAPHENE_TRACEPOINT();
 
-  if (!innerSolver_)
-    innerSolver_ = solver::Solver<Type>::createSolver(this->matrix(),
-                                                      config_->innerSolver);
-
   const Matrix<Type>& A = this->matrix();
   if (!A.isVectorCompatible(x, true, true))
     throw std::runtime_error("x must be vector with halo cells.");
@@ -139,11 +149,29 @@ SolverStats Solver<Type>::solve(Value<Type>& x, Value<Type>& b) {
   if (!A.isVectorCompatible(b, false, true))
     throw std::runtime_error("b must be vector without halo cells.");
 
-  if (config_->mixedPrecision)
-    return solveMixedPrecision(x, b);
-  else
+  if (config_->mixedPrecision) {
+    if (config_->useDoubleWordArithmetic) {
+      if (!std::is_same_v<Type, float>) {
+        throw std::runtime_error(
+            "Double word arithmetic is only supported for single precision "
+            "solvers.");
+      }
+      spdlog::trace("Solving with double word arithmetic");
+      return solveMixedPrecision<doubleword>(x, b);
+    } else {
+      spdlog::trace("Solving with double precision");
+      return solveMixedPrecision<double_of_v<Type>>(x, b);
+    }
+  } else
     return solveSinglePrecision(x, b);
 }
+template <DataType Type>
+Solver<Type>::Solver(const Matrix<Type>& matrix,
+                     std::shared_ptr<Configuration> config)
+    : solver::Solver<Type>(matrix),
+      config_(std::move(config)),
+      innerSolver_(solver::Solver<Type>::createSolver(this->matrix(),
+                                                      config_->innerSolver)) {}
 
 template class Solver<float>;
 }  // namespace graphene::matrix::solver::iterativerefinement

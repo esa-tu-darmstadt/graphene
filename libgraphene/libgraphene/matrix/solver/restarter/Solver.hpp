@@ -14,8 +14,7 @@ class Solver : public solver::Solver<Type> {
   std::shared_ptr<solver::Solver<Type>> innerSolver_;
 
  public:
-  Solver(const Matrix<Type>& matrix, std::shared_ptr<Configuration> config)
-      : solver::Solver<Type>(matrix), config_(std::move(config)) {}
+  Solver(const Matrix<Type>& matrix, std::shared_ptr<Configuration> config);
 
   SolverStats solve(Value<Type>& x, Value<Type>& b) override;
 
