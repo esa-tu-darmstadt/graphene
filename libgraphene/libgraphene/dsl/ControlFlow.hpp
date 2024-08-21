@@ -30,4 +30,13 @@ void While(Expression<bool> condition, std::function<void()> body);
  */
 void Repeat(int count, std::function<void()> body);
 
+/**
+ * @brief Measures the time taken to execute a block of code.
+ *
+ * @param body The block of code to execute.
+ * @param tile The tile to execute the code on.
+ * @return The cycle count taken to execute the block of code.
+ */
+Value<unsigned> Time(std::function<void()> body, size_t tile);
+
 }  // namespace graphene::cf

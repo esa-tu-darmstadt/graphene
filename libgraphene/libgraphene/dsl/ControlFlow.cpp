@@ -2,7 +2,10 @@
 
 #include <spdlog/spdlog.h>
 
+#include <cstddef>
+#include <poplar/CycleCount.hpp>
 #include <poplar/Program.hpp>
+#include <poplar/SyncType.hpp>
 
 #include "libgraphene/util/Context.hpp"
 #include "libgraphene/util/DebugInfo.hpp"
@@ -72,4 +75,22 @@ void graphene::cf::Repeat(int count, std::function<void()> body) {
   }
 
   program.add(poplar::program::Repeat(count, seq, di));
+}
+
+Value<unsigned> graphene::cf::Time(std::function<void()> body, size_t tile) {
+  DebugInfo di("cf");
+  poplar::program::Sequence seq;
+  {
+    Context context(seq);
+    body();
+  }
+
+  // The first element of the tensor is the lower 32 bits and the second element
+  // is the upper 32 bits.
+  auto tensor = poplar::cycleCount(Context::graph(), seq, tile,
+                                   poplar::SyncType::GLOBAL, di);
+
+  Context::program().add(seq);
+
+  return Value<unsigned>(tensor.slice(0, 1));
 }
