@@ -1,8 +1,9 @@
 #pragma once
 
 #include <memory>
+#include <optional>
 #include <poplar/DebugContext.hpp>
-#include <utility>
+#include <variant>
 
 #include "libgraphene/matrix/solver/Solver.hpp"
 #include "libgraphene/matrix/solver/SolverStats.hpp"

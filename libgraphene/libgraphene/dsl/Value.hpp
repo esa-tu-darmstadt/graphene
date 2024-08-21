@@ -6,7 +6,6 @@
 #include <poplar/Graph.hpp>
 #include <popops/Reduce.hpp>
 #include <typeindex>
-#include <variant>
 
 #include "libgraphene/common/Concepts.hpp"
 #include "libgraphene/dsl/Expression.hpp"
