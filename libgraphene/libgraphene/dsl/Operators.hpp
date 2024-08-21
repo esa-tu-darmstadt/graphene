@@ -4,9 +4,9 @@
 #include <poputil/VertexTemplates.hpp>
 
 #include "libgraphene/dsl/Expression.hpp"
-#include "libgraphene/dsl/OperatorTraits.hpp"
 #include "libgraphene/dsl/Traits.hpp"
 #include "libgraphene/dsl/Value.hpp"
+#include "libgraphene/dsl/details/OperatorTraits.hpp"
 #include "libgraphene/util/Context.hpp"
 #include "libgraphene/util/DebugInfo.hpp"
 
