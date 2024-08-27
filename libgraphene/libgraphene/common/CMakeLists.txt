@@ -1,1 +1,1 @@
-add_library(GrapheneCommon INTERFACE)
+add_library(GrapheneCommon SHARED "Types.cpp")

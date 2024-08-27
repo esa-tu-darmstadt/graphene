@@ -3,6 +3,8 @@
 #include <array>
 #include <cstdint>
 #include <poplar/ArrayRef.hpp>
+#include <poplar/Type.hpp>
+#include <string_view>
 
 #include "libtwofloat/twofloat.hpp"
 

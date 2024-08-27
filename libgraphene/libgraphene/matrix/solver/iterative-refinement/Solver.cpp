@@ -60,21 +60,35 @@ SolverStats Solver<Type>::solveMixedPrecision(Value<Type>& x,
     stats.iterations = stats.iterations + 1;
 
     // Reset the initial guess to zero if the inner solver uses it
-    if (innerSolver_->usesInitialGuess()) x = 0;
+    if (innerSolver_->usesInitialGuess()) {
+      // x = 0;
+      cf::Time([&]() { x = 0; }, 0).print("MPIR Reset Initial Guess");
+    }
 
     // Solve the correction
-    innerSolver_->solve(x, residual);
+    // innerSolver_->solve(x, residual);
+    cf::Time([&]() { innerSolver_->solve(x, residual); }, 0)
+        .print("MPIR Inner Solver Cycles");
 
     // Update the solution
-    xDouble = ops::Add(xDouble, x);
+    // xDouble = ops::Add(xDouble, x);
+    cf::Time([&]() { xDouble = ops::Add(xDouble, x); }, 0)
+        .print("MPIR Add Cycles");
 
-    // Recalculate the residual
-    residual = A.residual(xDouble, b);
+    // Recalculate the mixed-precision residual
+    // residual = A.residual(xDouble, b);
+    cf::Time([&]() { residual = A.residual(xDouble, b); }, 0)
+        .print("MPIR Residual Cylces");
 
     // Check for convergence
-    stats.finalResidual = A.vectorNorm(config_->norm, residual);
-    stats.checkConvergence(config_->absTolerance, config_->relTolerance,
-                           config_->relResidual);
+    cf::Time(
+        [&]() {
+          stats.finalResidual = A.vectorNorm(config_->norm, residual);
+          stats.checkConvergence(config_->absTolerance, config_->relTolerance,
+                                 config_->relResidual);
+        },
+        0)
+        .print("MPIR Check Convergence Cycles");
 
     if (config_->printPerformanceEachIteration) stats.print();
   });

@@ -94,3 +94,31 @@ Value<unsigned> graphene::cf::Time(std::function<void()> body, size_t tile) {
 
   return Value<unsigned>(tensor.slice(0, 1));
 }
+
+template <DataType RetType>
+std::tuple<Value<RetType>, Value<unsigned>> graphene::cf::Time(
+    std::function<Value<RetType>()> body, size_t tile) {
+  DebugInfo di("cf");
+  std::optional<Value<RetType>> result;
+  poplar::program::Sequence seq;
+  {
+    Context context(seq);
+    result = body();
+  }
+
+  // The first element of the tensor is the lower 32 bits and the second element
+  // is the upper 32 bits.
+  auto tensor = poplar::cycleCount(Context::graph(), seq, tile,
+                                   poplar::SyncType::GLOBAL, di);
+
+  Context::program().add(seq);
+
+  return {*result, Value<unsigned>(tensor.slice(0, 1))};
+}
+
+// Explicit instantiations
+#define INSTANTIATE_TIME_AND_RETURN(TYPE)                                     \
+  template std::tuple<Value<TYPE>, Value<unsigned>> graphene::cf::Time<TYPE>( \
+      std::function<Value<TYPE>()>, size_t);
+
+INSTANTIATE_TIME_AND_RETURN(float)

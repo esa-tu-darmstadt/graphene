@@ -87,6 +87,7 @@ poplar::Tensor sliceTensorToTile(
     throw std::runtime_error(
         "This function currently only supports tensors with at most a single "
         "interval per tile");
+  if (intervals.size() == 0) return poplar::Tensor();
   poplar::Interval interval = intervals[0];
 
   // The stride is the product of all dimensions except the first one

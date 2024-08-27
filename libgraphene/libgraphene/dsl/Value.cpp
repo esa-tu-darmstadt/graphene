@@ -174,6 +174,7 @@ void Value<Type>::print(std::string name, poplar::PrintTensorFmt fmt) const {
   }
 
   for (size_t ipu = 0; ipu < ipuIntervals.size(); ++ipu) {
+    if (ipuIntervals[ipu].size() == 0) continue;
     std::string localName = name;
     if (ipuIntervals.size() > 1) localName += "#ipu" + std::to_string(ipu);
     Context::program().add(poplar::program::PrintTensor(

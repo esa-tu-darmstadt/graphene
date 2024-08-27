@@ -1,5 +1,8 @@
 #pragma once
 
+#include <functional>
+#include <tuple>
+
 #include "libgraphene/dsl/Value.hpp"
 
 namespace graphene::cf {
@@ -38,5 +41,18 @@ void Repeat(int count, std::function<void()> body);
  * @return The cycle count taken to execute the block of code.
  */
 Value<unsigned> Time(std::function<void()> body, size_t tile);
+
+/**
+ * @brief Measures the time taken to execute a block of code and returns the
+ * result of the block of code.
+ *
+ * @param body The block of code to execute.
+ * @param tile The tile to execute the code on.
+ * @return A tuple containing the return value of the block of code and the
+ * cycle count taken to execute the block of code.
+ */
+template <DataType RetType>
+std::tuple<Value<RetType>, Value<unsigned>> Time(
+    std::function<Value<RetType>()> body, size_t tile);
 
 }  // namespace graphene::cf
