@@ -3,8 +3,8 @@
 #include <variant>
 
 #include "libgraphene/common/Concepts.hpp"
-#include "libgraphene/dsl/RemoteValue.hpp"
-#include "libgraphene/dsl/Value.hpp"
+#include "libgraphene/dsl/RemoteTensor.hpp"
+#include "libgraphene/dsl/Tensor.hpp"
 namespace graphene {
 template <DataType... Types>
 class ValueVariant;
@@ -14,13 +14,13 @@ template <DataType... Types>
  * @class RemoteValueVariant
  * @brief A class representing a remote value of any of the given types.
  *
- * This class is a variant of RemoteValue<Types> for all given types.
+ * This class is a variant of RemoteTensor<Types> for all given types.
  *
  * @tparam Types The types of remote values that can be stored in the variant.
  */
 class RemoteValueVariant {
-  using InnerType = std::variant<RemoteValue<Types>...>;
-  using ValueInnerType = std::variant<Value<Types>...>;
+  using InnerType = std::variant<RemoteTensor<Types>...>;
+  using ValueInnerType = std::variant<Tensor<Types>...>;
   using ValueType = ValueVariant<Types...>;
   InnerType value_;
 
@@ -36,7 +36,7 @@ class RemoteValueVariant {
    * @param value The RemoteValue to be assigned.
    * @return A reference to the updated RemoteValueVariant.
    */
-  RemoteValueVariant &operator=(RemoteValue<T> value) {
+  RemoteValueVariant &operator=(RemoteTensor<T> value) {
     value_ = std::move(value);
     return *this;
   }

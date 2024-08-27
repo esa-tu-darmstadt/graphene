@@ -7,8 +7,8 @@
 #include <variant>
 
 #include "libgraphene/common/Concepts.hpp"
-#include "libgraphene/dsl/HostValue.hpp"
-#include "libgraphene/dsl/HostValueVariant.hpp"
+#include "libgraphene/dsl/HostTensor.hpp"
+#include "libgraphene/dsl/HostTensorVariant.hpp"
 #include "libgraphene/matrix/host/TileLayout.hpp"
 #include "libgraphene/matrix/host/details/CoordinateFormat.hpp"
 #include "libgraphene/matrix/host/details/HostMatrixBase.hpp"
@@ -50,8 +50,8 @@ class CRSHostMatrix : public HostMatrixBase<Type> {
   AnyUIntHostValue colorSortAddr;
   AnyUIntHostValue colorSortStartPtr;
 
-  HostValue<Type> offDiagValues_;
-  HostValue<Type> diagValues_;
+  HostTensor<Type> offDiagValues_;
+  HostTensor<Type> diagValues_;
 
  public:
   explicit CRSHostMatrix(TripletMatrix<Type> tripletMatrix, size_t numTiles,
@@ -61,7 +61,7 @@ class CRSHostMatrix : public HostMatrixBase<Type> {
 
   virtual matrix::Matrix<Type> copyToTile() override;
 
-  HostValue<Type> decomposeOffDiagCoefficients(
+  HostTensor<Type> decomposeOffDiagCoefficients(
       const std::vector<Type> &values) const;
 
   MatrixFormat getFormat() const override { return MatrixFormat::CRS; }

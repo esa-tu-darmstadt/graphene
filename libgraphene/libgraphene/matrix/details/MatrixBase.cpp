@@ -14,7 +14,7 @@
 namespace graphene::matrix {
 template <DataType Type>
 template <typename VectorType>
-void MatrixBase<Type>::exchangeHaloCells(Value<VectorType> &value) const {
+void MatrixBase<Type>::exchangeHaloCells(Tensor<VectorType> &value) const {
   DebugInfo di("MatrixBase");
 
   struct ExchangeHaloCellsMetadata {
@@ -96,7 +96,7 @@ void MatrixBase<Type>::exchangeHaloCells(Value<VectorType> &value) const {
 
 template <DataType Type>
 template <typename VectorType>
-bool MatrixBase<Type>::isVectorCompatible(const Value<VectorType> &value,
+bool MatrixBase<Type>::isVectorCompatible(const Tensor<VectorType> &value,
                                           bool withHalo,
                                           bool tileMappingMustMatch) const {
   auto [mapping, shape] = hostMatrix.getVectorTileMappingAndShape(withHalo);
@@ -120,8 +120,8 @@ bool MatrixBase<Type>::isVectorCompatible(const Value<VectorType> &value,
 
 template <DataType Type>
 template <typename VectorType>
-Value<VectorType> MatrixBase<Type>::stripHaloCellsFromVector(
-    const Value<VectorType> &x) const {
+Tensor<VectorType> MatrixBase<Type>::stripHaloCellsFromVector(
+    const Tensor<VectorType> &x) const {
   auto [mappingWithoutHalo, shapeWithoutHalo] =
       hostMatrix.getVectorTileMappingAndShape(false);
 
@@ -151,53 +151,54 @@ Value<VectorType> MatrixBase<Type>::stripHaloCellsFromVector(
     tensors[tile] = tileTensor.slice(intervalsOnThisTile[0].begin(),
                                      intervalsOnThisTile[0].end());
   }
-  return Value<VectorType>(poplar::concat(tensors));
+  return Tensor<VectorType>(poplar::concat(tensors));
 }
 
 template <DataType Type>
 template <typename VectorType>
-Value<VectorType> MatrixBase<Type>::vectorNorm(
-    VectorNorm norm, const Value<VectorType> &x) const {
-  Value<VectorType> stripped = stripHaloCellsFromVector(x);
+Tensor<VectorType> MatrixBase<Type>::vectorNorm(
+    VectorNorm norm, const Tensor<VectorType> &x) const {
+  Tensor<VectorType> stripped = stripHaloCellsFromVector(x);
   return stripped.norm(norm);
 }
 
 template <DataType Type>
 template <typename VectorType>
-Value<VectorType> MatrixBase<Type>::createUninitializedVector(
+Tensor<VectorType> MatrixBase<Type>::createUninitializedVector(
     bool withHalo) const {
   auto [mapping, shape] = hostMatrix.getVectorTileMappingAndShape(withHalo);
-  return Value<VectorType>(shape, mapping);
+  return Tensor<VectorType>(shape, mapping);
 }
 
 // Template instantiations
 #define INSTANTIATE(T)                                                         \
   template class MatrixBase<T>;                                                \
-  template void MatrixBase<T>::exchangeHaloCells(Value<T> &value) const;       \
+  template void MatrixBase<T>::exchangeHaloCells(Tensor<T> &value) const;      \
   template bool MatrixBase<T>::isVectorCompatible(                             \
-      const Value<T> &value, bool withHalo, bool tileMappingMustMatch) const;  \
-  template Value<T> MatrixBase<T>::stripHaloCellsFromVector(const Value<T> &x) \
-      const;                                                                   \
-  template Value<T> MatrixBase<T>::vectorNorm(VectorNorm norm,                 \
-                                              const Value<T> &x) const;        \
-  template Value<T> MatrixBase<T>::createUninitializedVector(bool withHalo)    \
+      const Tensor<T> &value, bool withHalo, bool tileMappingMustMatch) const; \
+  template Tensor<T> MatrixBase<T>::stripHaloCellsFromVector(                  \
+      const Tensor<T> &x) const;                                               \
+  template Tensor<T> MatrixBase<T>::vectorNorm(VectorNorm norm,                \
+                                               const Tensor<T> &x) const;      \
+  template Tensor<T> MatrixBase<T>::createUninitializedVector(bool withHalo)   \
       const;
 
 INSTANTIATE(float)
 
 // Additionally, instantiate the template for mixed precision
 template void MatrixBase<float>::exchangeHaloCells(
-    Value<doubleword> &value) const;
+    Tensor<doubleword> &value) const;
 template bool MatrixBase<float>::isVectorCompatible(
-    const Value<doubleword> &value, bool withHalo,
+    const Tensor<doubleword> &value, bool withHalo,
     bool tileMappingMustMatch) const;
-template Value<doubleword> MatrixBase<float>::stripHaloCellsFromVector(
-    const Value<doubleword> &x) const;
+template Tensor<doubleword> MatrixBase<float>::stripHaloCellsFromVector(
+    const Tensor<doubleword> &x) const;
 // Additionally, instantiate the template for mixed precision
-template void MatrixBase<float>::exchangeHaloCells(Value<double> &value) const;
+template void MatrixBase<float>::exchangeHaloCells(Tensor<double> &value) const;
 template bool MatrixBase<float>::isVectorCompatible(
-    const Value<double> &value, bool withHalo, bool tileMappingMustMatch) const;
-template Value<double> MatrixBase<float>::stripHaloCellsFromVector(
-    const Value<double> &x) const;
+    const Tensor<double> &value, bool withHalo,
+    bool tileMappingMustMatch) const;
+template Tensor<double> MatrixBase<float>::stripHaloCellsFromVector(
+    const Tensor<double> &x) const;
 
 }  // namespace graphene::matrix

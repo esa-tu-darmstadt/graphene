@@ -30,9 +30,9 @@ HostMatrix<Type> loadMatrixFromFile(std::filesystem::path path, size_t numTiles,
 }
 
 template <DataType Type>
-HostValue<Type> loadVectorFromFile(std::filesystem::path path,
-                                   const HostMatrix<Type> &matrix,
-                                   bool withHalo, std::string name) {
+HostTensor<Type> loadVectorFromFile(std::filesystem::path path,
+                                    const HostMatrix<Type> &matrix,
+                                    bool withHalo, std::string name) {
   return matrix.getImpl().loadVectorFromFile(path, withHalo, name);
 }
 
@@ -51,9 +51,9 @@ template HostMatrix<float> loadMatrixFromFile(std::filesystem::path path,
                                               size_t numTiles,
                                               MatrixFormat format,
                                               std::string name);
-template HostValue<float> loadVectorFromFile(std::filesystem::path path,
-                                             const HostMatrix<float> &matrix,
-                                             bool withHalo, std::string name);
+template HostTensor<float> loadVectorFromFile(std::filesystem::path path,
+                                              const HostMatrix<float> &matrix,
+                                              bool withHalo, std::string name);
 template HostMatrix<float> generate3DPoissonMatrix(size_t nx, size_t ny,
                                                    size_t nz, size_t numTiles,
                                                    MatrixFormat format,

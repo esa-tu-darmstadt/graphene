@@ -5,7 +5,7 @@
 #include <poplar/DebugContext.hpp>
 #include <variant>
 
-#include "libgraphene/dsl/Value.hpp"
+#include "libgraphene/dsl/Tensor.hpp"
 #include "libgraphene/matrix/details/MatrixBase.hpp"
 #include "libgraphene/matrix/details/crs/CRSMatrix.hpp"
 
@@ -54,35 +54,36 @@ class Matrix {
    * @param b The right-hand side vector.
    * @param config The configuration for the solver.
    */
-  void solve(Value<Type> &x, Value<Type> &b,
+  void solve(Tensor<Type> &x, Tensor<Type> &b,
              std::shared_ptr<solver::Configuration> &config);
 
   /** Computes the residual $ b - Ax $ */
-  Value<Type> residual(Value<Type> &x, const Value<Type> &b) const {
+  Tensor<Type> residual(Tensor<Type> &x, const Tensor<Type> &b) const {
     return pimpl_->residual(x, b);
   }
 
   /** Computes the mixed-precision residual. */
-  Value<float> residual(Value<doubleword> &x, const Value<float> &b) const
+  Tensor<float> residual(Tensor<doubleword> &x, const Tensor<float> &b) const
     requires std::is_same_v<Type, float>
   {
     return pimpl_->residual(x, b);
   }
 
   /** Computes the mixed-precision residual. */
-  Value<float> residual(Value<double> &x, const Value<float> &b) const
+  Tensor<float> residual(Tensor<double> &x, const Tensor<float> &b) const
     requires std::is_same_v<Type, float>
   {
     return pimpl_->residual(x, b);
   }
 
   /** Sparse matrix vector multiplication */
-  Value<Type> operator*(Value<Type> &x) const { return pimpl_->operator*(x); }
+  Tensor<Type> operator*(Tensor<Type> &x) const { return pimpl_->operator*(x); }
 
   /** Returns a view of the vector without the halo cells. Both values have the
    * same underlying tensor, i.e., modifying one will modify the other. */
   template <typename VectorType>
-  Value<VectorType> stripHaloCellsFromVector(const Value<VectorType> &x) const {
+  Tensor<VectorType> stripHaloCellsFromVector(
+      const Tensor<VectorType> &x) const {
     return pimpl_->stripHaloCellsFromVector(x);
   }
 
@@ -95,7 +96,7 @@ class Matrix {
    * the vector.
    * @return An uninitialized vector of type VectorType.
    */
-  Value<VectorType> createUninitializedVector(bool withHalo) const {
+  Tensor<VectorType> createUninitializedVector(bool withHalo) const {
     return pimpl_->template createUninitializedVector<VectorType>(withHalo);
   }
 
@@ -103,15 +104,15 @@ class Matrix {
    * Value::norm, this strips the halo cells away, which would otherwise be
    * counted multiple times by the reduce operation. */
   template <typename VectorType>
-  Value<VectorType> vectorNorm(VectorNorm norm,
-                               const Value<VectorType> &x) const {
+  Tensor<VectorType> vectorNorm(VectorNorm norm,
+                                const Tensor<VectorType> &x) const {
     return pimpl_->vectorNorm(norm, x);
   }
 
   /** Returns true if the shape if the given vector is compatible to the matrix,
    * i.e. the product $ A*x $ can be calculated. Optionally, checks that the
    * tile mapping of the vector is as expected. */
-  bool isVectorCompatible(const Value<Type> &value, bool withHalo,
+  bool isVectorCompatible(const Tensor<Type> &value, bool withHalo,
                           bool tileMappingMustMatch = true) const {
     return pimpl_->isVectorCompatible(value, withHalo, tileMappingMustMatch);
   }

@@ -44,13 +44,13 @@ class HostMatrixBase
 
   bool multicolorRecommended() const { return multicolorRecommended_; }
 
-  virtual HostValue<Type> loadVectorFromFile(std::string fileName,
-                                             bool withHalo = false,
-                                             std::string name = "vector") const;
+  virtual HostTensor<Type> loadVectorFromFile(
+      std::string fileName, bool withHalo = false,
+      std::string name = "vector") const;
 
-  virtual HostValue<Type> decomposeVector(const std::vector<Type> &vector,
-                                          bool includeHaloCells,
-                                          std::string name = "vector") const;
+  virtual HostTensor<Type> decomposeVector(const std::vector<Type> &vector,
+                                           bool includeHaloCells,
+                                           std::string name = "vector") const;
 };
 }  // namespace host
 }  // namespace graphene::matrix

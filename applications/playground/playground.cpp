@@ -5,8 +5,8 @@
 
 #include "libgraphene/dsl/ControlFlow.hpp"
 #include "libgraphene/dsl/Operators.hpp"
-#include "libgraphene/dsl/RemoteValue.hpp"
-#include "libgraphene/dsl/Value.hpp"
+#include "libgraphene/dsl/RemoteTensor.hpp"
+#include "libgraphene/dsl/Tensor.hpp"
 #include "libgraphene/matrix/Matrix.hpp"
 #include "libgraphene/matrix/Norm.hpp"
 #include "libgraphene/matrix/host/HostMatrix.hpp"

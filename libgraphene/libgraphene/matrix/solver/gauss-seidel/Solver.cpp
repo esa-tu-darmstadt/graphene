@@ -23,7 +23,7 @@ Solver<Type>::Solver(const Matrix<Type>& matrix,
       solveMulticolor_(this->shouldUseMulticolor(config_->solveMulticolor)) {}
 
 template <DataType Type>
-void Solver<Type>::solveIterationCSR(Value<Type>& x, Value<Type>& b) const {
+void Solver<Type>::solveIterationCSR(Tensor<Type>& x, Tensor<Type>& b) const {
   const auto& A = this->matrix().template getImpl<crs::CRSMatrix<Type>>();
   DebugInfo di("GaussSeidelSolver");
   auto& graph = Context::graph();
@@ -93,8 +93,8 @@ void Solver<Type>::solveIterationCSR(Value<Type>& x, Value<Type>& b) const {
 }
 
 template <DataType Type>
-void gaussseidel::Solver<Type>::solveIteration(Value<Type>& x,
-                                               Value<Type>& b) const {
+void gaussseidel::Solver<Type>::solveIteration(Tensor<Type>& x,
+                                               Tensor<Type>& b) const {
   switch (this->matrix().getFormat()) {
     case MatrixFormat::CRS:
       solveIterationCSR(x, b);
@@ -105,7 +105,7 @@ void gaussseidel::Solver<Type>::solveIteration(Value<Type>& x,
 }
 
 template <DataType Type>
-SolverStats Solver<Type>::solve(Value<Type>& x, Value<Type>& b) {
+SolverStats Solver<Type>::solve(Tensor<Type>& x, Tensor<Type>& b) {
   GRAPHENE_TRACEPOINT();
   spdlog::trace("Solving with Gauss-Seidel");
 
@@ -139,7 +139,7 @@ SolverStats Solver<Type>::solve(Value<Type>& x, Value<Type>& b) {
     stats.bNorm = A.vectorNorm(config_->norm, b);
 
   // Calculate the initial residual
-  Value<Type> initialResidual = A.residual(x, b);
+  Tensor<Type> initialResidual = A.residual(x, b);
   stats.initialResidual = A.vectorNorm(config_->norm, initialResidual);
   stats.finalResidual = stats.initialResidual;
 

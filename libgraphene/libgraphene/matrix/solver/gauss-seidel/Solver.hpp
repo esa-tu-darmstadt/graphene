@@ -13,14 +13,14 @@ class Solver : public solver::Solver<Type> {
   std::shared_ptr<const gaussseidel::Configuration> config_;
   bool solveMulticolor_;
 
-  void solveIteration(Value<Type>& x, Value<Type>& b) const;
-  void solveIterationCSR(Value<Type>& x, Value<Type>& b) const;
+  void solveIteration(Tensor<Type>& x, Tensor<Type>& b) const;
+  void solveIterationCSR(Tensor<Type>& x, Tensor<Type>& b) const;
 
  public:
   Solver(const Matrix<Type>& matrix,
          std::shared_ptr<const gaussseidel::Configuration> config);
 
-  SolverStats solve(Value<Type>& x, Value<Type>& b) override;
+  SolverStats solve(Tensor<Type>& x, Tensor<Type>& b) override;
 
   std::string name() const override { return "GaussSeidel"; }
   bool usesInitialGuess() const override { return true; }

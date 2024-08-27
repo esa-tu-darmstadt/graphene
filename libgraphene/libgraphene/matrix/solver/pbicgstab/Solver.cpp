@@ -28,7 +28,7 @@ Solver<Type>::Solver(const Matrix<Type>& matrix,
 }
 
 template <DataType Type>
-SolverStats Solver<Type>::solve(Value<Type>& x, Value<Type>& b) {
+SolverStats Solver<Type>::solve(Tensor<Type>& x, Tensor<Type>& b) {
   GRAPHENE_TRACEPOINT();
 
   const Matrix<Type>& A = this->matrix();
@@ -45,7 +45,7 @@ SolverStats Solver<Type>::solve(Value<Type>& x, Value<Type>& b) {
   SolverStats stats(this->name(), config_->norm, A.numTiles());
 
   // Calculate the initial residual field rA
-  Value<Type> rA = A.residual(x, b);
+  Tensor<Type> rA = A.residual(x, b);
 
   // Calculate the norm of b if required
   if (stats.requiresBNorm(config_->relTolerance))
@@ -55,21 +55,21 @@ SolverStats Solver<Type>::solve(Value<Type>& x, Value<Type>& b) {
   stats.initialResidual = A.vectorNorm(config_->norm, rA);
   stats.finalResidual = stats.initialResidual;
 
-  Value<Type> rA0rAold(0);
-  Value<Type> alpha(0);
-  Value<Type> omega(0);
+  Tensor<Type> rA0rAold(0);
+  Tensor<Type> alpha(0);
+  Tensor<Type> omega(0);
 
   // Store the initial residual
-  Value<Type> rA0 = rA;
-  Value<Type> pA = rA;
-  Value<Type> AyA = A.template createUninitializedVector<Type>(false);
+  Tensor<Type> rA0 = rA;
+  Tensor<Type> pA = rA;
+  Tensor<Type> AyA = A.template createUninitializedVector<Type>(false);
 
   auto terminate =
       (stats.converged && stats.iterations >= config_->minIterations) ||
       (stats.iterations >= config_->maxIterations) || stats.singular;
 
   cf::While(!terminate, [&]() {
-    Value<Type> rA0rA = Value<Type>(rA0 * rA).reduce();
+    Tensor<Type> rA0rA = Tensor<Type>(rA0 * rA).reduce();
     PBICGSTAB_VERBOSE_PRINT(rA0rA);
 
     // Check for rA0rA for singularity
@@ -83,7 +83,7 @@ SolverStats Solver<Type>::solve(Value<Type>& x, Value<Type>& b) {
 
       // Precondition pA
       // Calculate yA = M^-1 * pA by solving M * yA = pA
-      Value<Type> yA = A.template createUninitializedVector<Type>(true);
+      Tensor<Type> yA = A.template createUninitializedVector<Type>(true);
       if (preconditioner_) {
         if (preconditioner_->usesInitialGuess()) {
           yA = 0;
@@ -100,20 +100,20 @@ SolverStats Solver<Type>::solve(Value<Type>& x, Value<Type>& b) {
       AyA = A * yA;
 
       // Update alpha
-      Value<Type> rA0AyA = Value<Type>(rA0 * AyA).reduce();
+      Tensor<Type> rA0AyA = Tensor<Type>(rA0 * AyA).reduce();
       alpha = rA0rA / rA0AyA;
 
       PBICGSTAB_VERBOSE_PRINT(rA0AyA);
       PBICGSTAB_VERBOSE_PRINT(alpha);
 
       // Calculate sA
-      Value<Type> sA = rA - alpha * AyA;
+      Tensor<Type> sA = rA - alpha * AyA;
 
       // The original BiCGStab algorithm would check for convergence here, but
       // we skip it to prevent bloating up the graph
 
       // Optionally precondition sA into zA
-      Value<Type> zA = A.template createUninitializedVector<Type>(true);
+      Tensor<Type> zA = A.template createUninitializedVector<Type>(true);
       if (preconditioner_) {
         if (preconditioner_->usesInitialGuess()) {
           zA = 0;
@@ -127,11 +127,11 @@ SolverStats Solver<Type>::solve(Value<Type>& x, Value<Type>& b) {
       PBICGSTAB_VERBOSE_PRINT(zA);
 
       // Calculate tA
-      Value<Type> tA = A * zA;
-      Value<Type> tAtA = Value<Type>(tA * tA).reduce();
+      Tensor<Type> tA = A * zA;
+      Tensor<Type> tAtA = Tensor<Type>(tA * tA).reduce();
 
       // Update omega from tA and sA
-      omega = Value<Type>(tA * sA).reduce() / tAtA;
+      omega = Tensor<Type>(tA * sA).reduce() / tAtA;
 
       PBICGSTAB_VERBOSE_PRINT(tA);
       PBICGSTAB_VERBOSE_PRINT(tAtA);

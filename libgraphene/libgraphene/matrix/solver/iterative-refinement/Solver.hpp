@@ -13,13 +13,13 @@ class Solver : public solver::Solver<Type> {
   std::shared_ptr<solver::Solver<Type>> innerSolver_;
 
   template <DataType ExtendedPrecisionType>
-  SolverStats solveMixedPrecision(Value<Type>& x, Value<Type>& b) const;
-  SolverStats solveSinglePrecision(Value<Type>& x, Value<Type>& b) const;
+  SolverStats solveMixedPrecision(Tensor<Type>& x, Tensor<Type>& b) const;
+  SolverStats solveSinglePrecision(Tensor<Type>& x, Tensor<Type>& b) const;
 
  public:
   Solver(const Matrix<Type>& matrix, std::shared_ptr<Configuration> config);
 
-  SolverStats solve(Value<Type>& x, Value<Type>& b) override;
+  SolverStats solve(Tensor<Type>& x, Tensor<Type>& b) override;
 
   std::string name() const override { return "IterativeRefinement"; }
   bool usesInitialGuess() const override { return true; }

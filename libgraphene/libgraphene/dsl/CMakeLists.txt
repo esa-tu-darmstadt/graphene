@@ -1,8 +1,9 @@
-add_library(GrapheneDSL SHARED "RemoteValue.cpp" 
-    "Value.cpp" 
+add_library(GrapheneDSL SHARED 
+    "RemoteTensor.cpp" 
+    "Tensor.cpp" 
     "Operators.cpp" 
     "Expression.cpp" 
-    "HostValue.cpp" 
+    "HostTensor.cpp" 
     "ControlFlow.cpp" 
     "codelet/CodeGen.cpp" 
     "codelet/Operators.cpp" 

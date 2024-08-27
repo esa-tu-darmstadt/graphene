@@ -3,7 +3,7 @@
 #include <functional>
 #include <tuple>
 
-#include "libgraphene/dsl/Value.hpp"
+#include "libgraphene/dsl/Tensor.hpp"
 
 namespace graphene::cf {
 /**
@@ -40,7 +40,7 @@ void Repeat(int count, std::function<void()> body);
  * @param tile The tile to execute the code on.
  * @return The cycle count taken to execute the block of code.
  */
-Value<unsigned> Time(std::function<void()> body, size_t tile);
+Tensor<unsigned> Time(std::function<void()> body, size_t tile);
 
 /**
  * @brief Measures the time taken to execute a block of code and returns the
@@ -52,7 +52,7 @@ Value<unsigned> Time(std::function<void()> body, size_t tile);
  * cycle count taken to execute the block of code.
  */
 template <DataType RetType>
-std::tuple<Value<RetType>, Value<unsigned>> Time(
-    std::function<Value<RetType>()> body, size_t tile);
+std::tuple<Tensor<RetType>, Tensor<unsigned>> Time(
+    std::function<Tensor<RetType>()> body, size_t tile);
 
 }  // namespace graphene::cf

@@ -15,10 +15,10 @@ class Solver : public solver::Solver<Type> {
 
   struct CRSFactorization {
     // The inverse of the diagonal of the factorized matrix
-    std::unique_ptr<Value<Type>> factorizedInverseDiag;
+    std::unique_ptr<Tensor<Type>> factorizedInverseDiag;
 
     // The off-diagonal of the factorized matrix
-    std::optional<Value<Type>> factorizedOffDiag;
+    std::optional<Tensor<Type>> factorizedOffDiag;
   };
 
   std::variant<CRSFactorization> factorization_;
@@ -28,13 +28,13 @@ class Solver : public solver::Solver<Type> {
 
   void factorize();
 
-  void solveCRS(Value<Type>& x, Value<Type>& b);
+  void solveCRS(Tensor<Type>& x, Tensor<Type>& b);
   void factorizeCRS();
 
  public:
   Solver(const Matrix<Type>& matrix, std::shared_ptr<Configuration> config);
 
-  SolverStats solve(Value<Type>& x, Value<Type>& b) override;
+  SolverStats solve(Tensor<Type>& x, Tensor<Type>& b) override;
 
   std::string name() const override {
     return config_->diagonalBased ? "DILU" : "ILU(0)";

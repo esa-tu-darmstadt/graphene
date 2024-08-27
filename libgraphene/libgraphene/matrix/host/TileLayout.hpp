@@ -8,7 +8,7 @@
 #include <vector>
 
 #include "libgraphene/common/Concepts.hpp"
-#include "libgraphene/dsl/HostValue.hpp"
+#include "libgraphene/dsl/HostTensor.hpp"
 namespace graphene::matrix::host {
 struct TileLayout {
   struct SeperatorRegion {

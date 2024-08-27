@@ -15,17 +15,17 @@ namespace graphene {
 using TileMapping = poplar::Graph::TileToTensorMapping;
 
 template <DataType Type>
-class RemoteValue;
+class RemoteTensor;
 
 /**
  * @brief Represents a mutable tensor, which can be assigned to.
  * This class has value semantics. When assigned or passed-by-value, a copy
  * program for the underlying tensor is generated.
  *
- * @tparam Type The data type of the value.
+ * @tparam Type The data type of the tensor.
  */
 template <DataType Type>
-class Value : public Expression<Type> {
+class Tensor : public Expression<Type> {
   // The tile mapping and shape of the tensor. Cached for performance reasons.
   mutable std::optional<TileMapping> tileMapping_;
   mutable std::optional<std::vector<size_t>> shape_;
@@ -39,29 +39,29 @@ class Value : public Expression<Type> {
    * @param shape The shape of the tensor.
    * @param tileMapping The tile mapping of the tensor.
    */
-  explicit Value(std::vector<size_t> shape = {}, TileMapping tileMapping = {},
-                 std::string name = "");
+  explicit Tensor(std::vector<size_t> shape = {}, TileMapping tileMapping = {},
+                  std::string name = "");
 
   /**
    * @brief Constructs a mutable tensor with an initial, scalar value.
    *
    * @param value The initial value.
    */
-  explicit Value(Type value, std::string name = "");
+  explicit Tensor(Type value, std::string name = "");
 
   /**
    * @brief Constructs a mutable tensor from a list of values.
    */
-  explicit Value(std::initializer_list<Type> values,
-                 std::vector<size_t> shape = {}, TileMapping tileMapping = {},
-                 std::string name = "");
+  explicit Tensor(std::initializer_list<Type> values,
+                  std::vector<size_t> shape = {}, TileMapping tileMapping = {},
+                  std::string name = "");
 
   /**
    * @brief Constructs a mutable value with a given poplar tensor.
    *
    * @param tensor The poplar tensor.
    */
-  explicit Value(const poplar::Tensor tensor);
+  explicit Tensor(const poplar::Tensor tensor);
 
   /**
    * @brief Constructs a mutable value with the initial value of the expression.
@@ -69,7 +69,7 @@ class Value : public Expression<Type> {
    *
    * @param expr The expression to initialize from.
    */
-  Value(Expression<Type> expr)
+  Tensor(Expression<Type> expr)
     requires PoplarNativeType<Type>;
 
   /**
@@ -77,19 +77,19 @@ class Value : public Expression<Type> {
    *
    * @param value The value to copy.
    */
-  Value(const Value &value);
+  Tensor(const Tensor &value);
 
   /**
    * @brief Constructs a mutable value by moving another value.
    *
    * @param value The value to move.
    */
-  Value(Value &&value) = default;
+  Tensor(Tensor &&value) = default;
 
   /** Assignment operators */
-  Value &operator=(const Value &value);
+  Tensor &operator=(const Tensor &value);
 
-  Value &operator=(const Expression<Type> &expr)
+  Tensor &operator=(const Expression<Type> &expr)
     requires PoplarNativeType<Type>;
 
   /**
@@ -135,9 +135,9 @@ class Value : public Expression<Type> {
   /**
    * @brief Copy the value to the remote memory.
    *
-   * @return RemoteValue<Type> The remote value.
+   * @return RemoteTensor<Type> The remote value.
    */
-  RemoteValue<Type> copyToRemote() const;
+  RemoteTensor<Type> copyToRemote() const;
 
   /**
    * @brief Reduce the value along the given dimensions.
@@ -146,10 +146,10 @@ class Value : public Expression<Type> {
    * @param dims The dimensions to reduce along.
    * @param params The reduction parameters.
    * @param debugContext The debug context.
-   * @return Value<Type> The reduced value.
+   * @return Tensor<Type> The reduced value.
    */
-  Value<Type> reduce(const std::vector<size_t> dims = {0},
-                     popops::ReduceParams params = {}) const
+  Tensor<Type> reduce(const std::vector<size_t> dims = {0},
+                      popops::ReduceParams params = {}) const
     requires PoplarNativeType<Type>;
 
   /**
@@ -157,7 +157,7 @@ class Value : public Expression<Type> {
    * Not yet implemented for double word arithmetic types.
    *
    * @param type The type of the norm.
-   * @return Value<Type> The norm of the value.
+   * @return Tensor<Type> The norm of the value.
    */
   Expression<Type> norm(VectorNorm type) const
     requires PoplarNativeType<Type>;
@@ -167,7 +167,7 @@ class Value : public Expression<Type> {
    * @return Expression<float> The casted expression.
    */
   template <typename DestType>
-  Value<DestType> cast() const
+  Tensor<DestType> cast() const
     requires std::is_same_v<Type, doubleword> && std::is_same_v<DestType, float>
   ;
 
@@ -176,7 +176,7 @@ class Value : public Expression<Type> {
    * @return Expression<float> The casted expression.
    */
   template <typename DestType>
-  Value<DestType> cast() const
+  Tensor<DestType> cast() const
     requires std::is_same_v<Type, double> && std::is_same_v<DestType, float>;
 
   /** @brief Casts a single precision float type to a double word type.
@@ -185,7 +185,7 @@ class Value : public Expression<Type> {
    * @return Expression<float> The casted expression.
    */
   template <typename DestType>
-  Value<DestType> cast() const
+  Tensor<DestType> cast() const
     requires std::is_same_v<Type, float> && std::is_same_v<DestType, doubleword>
   ;
 
@@ -195,10 +195,10 @@ class Value : public Expression<Type> {
    * @return Expression<float> The casted expression.
    */
   template <typename DestType>
-  Value<DestType> cast() const
+  Tensor<DestType> cast() const
     requires std::is_same_v<Type, float> && std::is_same_v<DestType, double>;
 
-  /** @brief Stores metadata in the value.
+  /** @brief Stores metadata in the tensor.
    *
    * @tparam MetadataType The type of the metadata.
    * @param metadata The metadata to store.
@@ -208,7 +208,7 @@ class Value : public Expression<Type> {
     metadata_[std::type_index(typeid(MetadataType))] = metadata;
   }
 
-  /** @brief Gets metadata from the value.
+  /** @brief Gets metadata from the tensor.
    *
    * @tparam MetadataType The type of the metadata.
    * @return MetadataType The metadata.
@@ -219,7 +219,7 @@ class Value : public Expression<Type> {
         metadata_.at(std::type_index(typeid(MetadataType))));
   }
 
-  /** @brief Checks if the value has metadata of the given type.
+  /** @brief Checks if the tensor has metadata of the given type.
    *
    * @tparam MetadataType The type of the metadata.
    * @return bool True if the value has metadata of the given type.
@@ -235,6 +235,6 @@ class Value : public Expression<Type> {
  * tensor uses the long long format, which stores both floating point words
  * in a single element. This functions adds one dimension of size 2 in which
  * it stores the upper and lower floating point words seperatly. */
-Value<float> unrollDoubleWordValue(const Value<doubleword> &value);
+Tensor<float> unrollDoubleWordValue(const Tensor<doubleword> &value);
 
 }  // namespace graphene

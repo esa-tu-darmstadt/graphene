@@ -1,17 +1,17 @@
-#include "libgraphene/dsl/HostValue.hpp"
+#include "libgraphene/dsl/HostTensor.hpp"
 
 #include <spdlog/spdlog.h>
 
 #include <poplar/DataStream.hpp>
 
-#include "libgraphene/dsl/RemoteValue.hpp"
+#include "libgraphene/dsl/RemoteTensor.hpp"
 #include "libgraphene/util/Context.hpp"
 #include "libgraphene/util/PoplarHelpers.hpp"
 #include "libgraphene/util/Runtime.hpp"
 
 namespace graphene {
 template <DataType Type>
-RemoteValue<Type> HostValue<Type>::copyToRemote() const {
+RemoteTensor<Type> HostTensor<Type>::copyToRemote() const {
   // Make sure that the number of elements in the data vector is equal to the
   // product of the shape vector
   size_t numElementsInShape = std::accumulate(shape().begin(), shape().end(), 1,
@@ -36,15 +36,15 @@ RemoteValue<Type> HostValue<Type>::copyToRemote() const {
   }
 
   storage_->wasCopiedToRemote = true;
-  return RemoteValue<Type>(buffers, mapping(), shape(), storage_->name);
+  return RemoteTensor<Type>(buffers, mapping(), shape(), storage_->name);
 };
 
 // Template instantiations
-template class HostValue<uint8_t>;
-template class HostValue<int8_t>;
-template class HostValue<uint16_t>;
-template class HostValue<int16_t>;
-template class HostValue<uint32_t>;
-template class HostValue<int32_t>;
-template class HostValue<float>;
+template class HostTensor<uint8_t>;
+template class HostTensor<int8_t>;
+template class HostTensor<uint16_t>;
+template class HostTensor<int16_t>;
+template class HostTensor<uint32_t>;
+template class HostTensor<int32_t>;
+template class HostTensor<float>;
 }  // namespace graphene

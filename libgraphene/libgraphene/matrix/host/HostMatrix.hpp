@@ -39,15 +39,15 @@ class HostMatrix {
   MatrixFormat getFormat() const { return pimpl->getFormat(); }
   size_t numTiles() const { return pimpl->numTiles(); }
 
-  HostValue<Type> loadVectorFromFile(std::string fileName,
-                                     bool withHalo = false,
-                                     std::string name = "vector") const {
+  HostTensor<Type> loadVectorFromFile(std::string fileName,
+                                      bool withHalo = false,
+                                      std::string name = "vector") const {
     return pimpl->loadVectorFromFile(fileName, withHalo, name);
   }
 
-  HostValue<Type> decomposeVector(const std::vector<Type> &vector,
-                                  bool includeHaloCells,
-                                  std::string name = "vector") const {
+  HostTensor<Type> decomposeVector(const std::vector<Type> &vector,
+                                   bool includeHaloCells,
+                                   std::string name = "vector") const {
     return pimpl->decomposeVector(vector, includeHaloCells, name);
   }
 };
@@ -58,10 +58,10 @@ HostMatrix<Type> loadMatrixFromFile(std::filesystem::path path, size_t numTiles,
                                     std::string name = "matrix");
 
 template <DataType Type>
-HostValue<Type> loadVectorFromFile(std::filesystem::path path,
-                                   const HostMatrix<Type> &matrix,
-                                   bool withHalo = false,
-                                   std::string name = "vector");
+HostTensor<Type> loadVectorFromFile(std::filesystem::path path,
+                                    const HostMatrix<Type> &matrix,
+                                    bool withHalo = false,
+                                    std::string name = "vector");
 
 template <DataType Type>
 HostMatrix<Type> generate3DPoissonMatrix(

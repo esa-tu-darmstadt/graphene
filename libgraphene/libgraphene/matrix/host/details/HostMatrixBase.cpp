@@ -24,7 +24,7 @@ HostMatrixBase<Type>::getVectorTileMappingAndShape(bool withHalo) const {
 }
 
 template <DataType Type>
-HostValue<Type> HostMatrixBase<Type>::decomposeVector(
+HostTensor<Type> HostMatrixBase<Type>::decomposeVector(
     const std::vector<Type> &vector, bool includeHaloCells,
     std::string name) const {
   auto [mapping, shape] = getVectorTileMappingAndShape(includeHaloCells);
@@ -42,12 +42,12 @@ HostValue<Type> HostMatrixBase<Type>::decomposeVector(
     }
   }
 
-  return HostValue<Type>(std::move(decomposedVector), std::move(shape),
-                         std::move(mapping), std::move(name));
+  return HostTensor<Type>(std::move(decomposedVector), std::move(shape),
+                          std::move(mapping), std::move(name));
 }
 
 template <DataType Type>
-HostValue<Type> HostMatrixBase<Type>::loadVectorFromFile(
+HostTensor<Type> HostMatrixBase<Type>::loadVectorFromFile(
     std::string fileName, bool withHalo, std::string name) const {
   GRAPHENE_TRACEPOINT();
   DoubletVector<Type> vector = loadDoubletVectorFromFile<Type>(fileName);

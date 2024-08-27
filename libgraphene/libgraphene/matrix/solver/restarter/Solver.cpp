@@ -24,14 +24,14 @@ Solver<Type>::Solver(const Matrix<Type>& matrix,
                                                       config_->innerSolver)) {}
 
 template <DataType Type>
-SolverStats Solver<Type>::solve(Value<Type>& x, Value<Type>& b) {
+SolverStats Solver<Type>::solve(Tensor<Type>& x, Tensor<Type>& b) {
   GRAPHENE_TRACEPOINT();
   DebugInfo di("RestartSolver");
 
   spdlog::trace("Building restarter for solver {} with {} restarts",
                 config_->innerSolver->solverName(), config_->maxRestarts);
 
-  Value<int> iterations(1);
+  Tensor<int> iterations(1);
   SolverStats stats = innerSolver_->solve(x, b);
 
   cf::While(iterations < config_->maxRestarts && !stats.converged, [&]() {

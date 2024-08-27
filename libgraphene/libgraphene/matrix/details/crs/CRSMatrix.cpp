@@ -15,7 +15,7 @@
 
 namespace graphene::matrix::crs {
 template <DataType Type>
-Value<Type> CRSMatrix<Type>::operator*(Value<Type> &x) const {
+Tensor<Type> CRSMatrix<Type>::operator*(Tensor<Type> &x) const {
   DebugInfo di("CRSMatrix");
   auto &graph = Context::graph();
 
@@ -33,7 +33,7 @@ Value<Type> CRSMatrix<Type>::operator*(Value<Type> &x) const {
   bool resultWithHalo = false;
   auto [resultMapping, resultShape] =
       this->hostMatrix.getVectorTileMappingAndShape(resultWithHalo);
-  Value<Type> result(resultShape, resultMapping);
+  Tensor<Type> result(resultShape, resultMapping);
 
   // The expected tile mapping of the input tensor
   auto [mappingWithHalo, shapeWithHalo] =
@@ -79,15 +79,15 @@ Value<Type> CRSMatrix<Type>::operator*(Value<Type> &x) const {
 }
 
 template <DataType Type>
-Value<Type> CRSMatrix<Type>::residual(Value<Type> &x, const Value<Type> &b,
-                                      bool withHalo) const {
+Tensor<Type> CRSMatrix<Type>::residual(Tensor<Type> &x, const Tensor<Type> &b,
+                                       bool withHalo) const {
   return b - (*this) * x;
 }
 
 template <DataType Type, DataType ExtendedType>
-static Value<Type> mixedPrecisionResidual(const CRSMatrix<Type> &matrix,
-                                          Value<ExtendedType> &x,
-                                          const Value<Type> &b) {
+static Tensor<Type> mixedPrecisionResidual(const CRSMatrix<Type> &matrix,
+                                           Tensor<ExtendedType> &x,
+                                           const Tensor<Type> &b) {
   DebugInfo di("CRSMatrix");
   auto &graph = Context::graph();
 
@@ -110,7 +110,7 @@ static Value<Type> mixedPrecisionResidual(const CRSMatrix<Type> &matrix,
   bool resultWithHalo = false;
   auto [resultMapping, resultShape] =
       matrix.hostMatrix.getVectorTileMappingAndShape(resultWithHalo);
-  Value<Type> result(resultShape, resultMapping);
+  Tensor<Type> result(resultShape, resultMapping);
 
   // The expected tile mapping of x
   auto [xMapping, xShape] =
@@ -167,14 +167,14 @@ static Value<Type> mixedPrecisionResidual(const CRSMatrix<Type> &matrix,
 }
 
 template <>
-Value<float> CRSMatrix<float>::residual(Value<double> &x,
-                                        const Value<float> &b) const {
+Tensor<float> CRSMatrix<float>::residual(Tensor<double> &x,
+                                         const Tensor<float> &b) const {
   return mixedPrecisionResidual<float, double>(*this, x, b);
 }
 
 template <>
-Value<float> CRSMatrix<float>::residual(Value<doubleword> &x,
-                                        const Value<float> &b) const {
+Tensor<float> CRSMatrix<float>::residual(Tensor<doubleword> &x,
+                                         const Tensor<float> &b) const {
   return mixedPrecisionResidual<float, doubleword>(*this, x, b);
 }
 

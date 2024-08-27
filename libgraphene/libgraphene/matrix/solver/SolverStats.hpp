@@ -4,7 +4,7 @@
 #include <poplar/DebugContext.hpp>
 #include <string>
 
-#include "libgraphene/dsl/Value.hpp"
+#include "libgraphene/dsl/Tensor.hpp"
 #include "libgraphene/matrix/Norm.hpp"
 namespace graphene::matrix::solver {
 struct SolverStats {
@@ -13,18 +13,18 @@ struct SolverStats {
 
   size_t numTiles;
 
-  Value<float> initialResidual =
-      Value<float>(std::numeric_limits<float>::infinity());
-  Value<float> finalResidual =
-      Value<float>(std::numeric_limits<float>::infinity());
+  Tensor<float> initialResidual =
+      Tensor<float>(std::numeric_limits<float>::infinity());
+  Tensor<float> finalResidual =
+      Tensor<float>(std::numeric_limits<float>::infinity());
 
-  Value<int> iterations = Value<int>(0);
+  Tensor<int> iterations = Tensor<int>(0);
 
-  Value<bool> converged = Value<bool>(false);
-  Value<bool> singular = Value<bool>(false);
+  Tensor<bool> converged = Tensor<bool>(false);
+  Tensor<bool> singular = Tensor<bool>(false);
 
-  Value<float> normFactor = Value<float>(0);
-  std::optional<Value<float>> bNorm;
+  Tensor<float> normFactor = Tensor<float>(0);
+  std::optional<Tensor<float>> bNorm;
 
   SolverStats(std::string solverName, VectorNorm norm, size_t numTiles)
       : solverName(std::move(solverName)), norm(norm), numTiles(numTiles) {}
@@ -41,7 +41,7 @@ struct SolverStats {
   void checkConvergence(float absTolerance, float relTolerance,
                         float relResidual);
 
-  void checkSingularity(Value<float> wApA,
+  void checkSingularity(Tensor<float> wApA,
                         float tolerance = Traits<float>::vsmall());
 
   bool requiresBNorm(float relTolerance) const { return relTolerance > 0; }

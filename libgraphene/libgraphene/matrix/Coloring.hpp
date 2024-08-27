@@ -1,7 +1,7 @@
 #pragma once
 
+#include "libgraphene/dsl/TensorVariant.hpp"
 #include "libgraphene/dsl/Traits.hpp"
-#include "libgraphene/dsl/ValueVariant.hpp"
 
 namespace graphene::matrix {
 struct Coloring {

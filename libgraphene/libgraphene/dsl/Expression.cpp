@@ -7,7 +7,7 @@
 #include <popops/Expr.hpp>
 #include <pvti/pvti.hpp>
 
-#include "libgraphene/dsl/Value.hpp"
+#include "libgraphene/dsl/Tensor.hpp"
 #include "libgraphene/util/Context.hpp"
 #include "libgraphene/util/DebugInfo.hpp"
 #include "libgraphene/util/Tracepoint.hpp"
@@ -34,7 +34,7 @@ Expression<Type>::Expression(poplar::Tensor tensor)
 }
 
 template <PoplarNativeType Type>
-Value<Type> materializeExpression(const Expression<Type> &expr) {
+Tensor<Type> materializeExpression(const Expression<Type> &expr) {
   GRAPHENE_TRACEPOINT();
   DebugInfo di("Expression");
 
@@ -49,7 +49,7 @@ Value<Type> materializeExpression(const Expression<Type> &expr) {
     // popops cannot infere the type of a constant, so we need to handle it
     // manually
     Type value = *reinterpret_cast<Type *>(constExpr->getData());
-    return Value<Type>(value);
+    return Tensor<Type>(value);
   } else {
     // Let popops do its magic to materialize the expression
     tensor = popops::map(Context::graph(), expr.expr(), expr.placeholders(),
@@ -57,11 +57,11 @@ Value<Type> materializeExpression(const Expression<Type> &expr) {
   }
 
   di.addOutput(tensor);
-  return Value<Type>(tensor);
+  return Tensor<Type>(tensor);
 }
 
 template <PoplarNativeType Type>
-void materializeExpression(const Expression<Type> &expr, Value<Type> &value) {
+void materializeExpression(const Expression<Type> &expr, Tensor<Type> &value) {
   GRAPHENE_TRACEPOINT();
   DebugInfo di("Expression");
 
@@ -142,11 +142,11 @@ size_t Expression<T>::numElements() const {
 }
 
 // Explicit instantiation
-#define INSTANTIATE_NATIVE_TYPE(T)                                    \
-  template class Expression<T>;                                       \
-  template Value<T> materializeExpression(const Expression<T> &expr); \
-  template void materializeExpression(const Expression<T> &expr,      \
-                                      Value<T> &value);
+#define INSTANTIATE_NATIVE_TYPE(T)                                     \
+  template class Expression<T>;                                        \
+  template Tensor<T> materializeExpression(const Expression<T> &expr); \
+  template void materializeExpression(const Expression<T> &expr,       \
+                                      Tensor<T> &value);
 
 #define INSTANTIATE_NON_NATIVE_TYPE(T) template class Expression<T>;
 

@@ -3,7 +3,7 @@
 #include <variant>
 
 #include "libgraphene/common/Concepts.hpp"
-#include "libgraphene/dsl/Value.hpp"
+#include "libgraphene/dsl/Tensor.hpp"
 
 namespace graphene {
 
@@ -14,14 +14,14 @@ class HostValueVariant;
  * @class ValueVariant
  * @brief A class representing a \ref Value of any of the given types.
  *
- * This class is a variant of Value<Types> for all given types.
+ * This class is a variant of Tensor<Types> for all given types.
  *
  * @tparam Types The types of values that can be stored in the variant.
  */
 template <DataType... Types>
 class ValueVariant {
-  using InnerType = std::variant<Value<Types>...>;
-  using RemoteValueInnerType = std::variant<RemoteValue<Types>...>;
+  using InnerType = std::variant<Tensor<Types>...>;
+  using RemoteValueInnerType = std::variant<RemoteTensor<Types>...>;
   using RemoteValueType = HostValueVariant<Types...>;
   InnerType value_;
 
@@ -46,7 +46,7 @@ class ValueVariant {
    */
   template <typename T>
     requires(std::is_same_v<T, Types> || ...)
-  ValueVariant(Value<T> value) : value_(std::move(value)) {}
+  ValueVariant(Tensor<T> value) : value_(std::move(value)) {}
 
   /**
    * @brief Assignment operator for Value.
@@ -57,7 +57,7 @@ class ValueVariant {
    */
   template <typename T>
     requires(std::is_same_v<T, Types> || ...)
-  ValueVariant &operator=(Value<T> value) {
+  ValueVariant &operator=(Tensor<T> value) {
     value_ = std::move(value);
     return *this;
   }

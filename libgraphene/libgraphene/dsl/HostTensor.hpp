@@ -13,7 +13,7 @@
 
 namespace graphene {
 template <DataType Type>
-class RemoteValue;
+class RemoteTensor;
 
 /**
  * @brief A class representing a host-side value and its tile mapping on an IPU.
@@ -21,7 +21,7 @@ class RemoteValue;
  * @tparam Type The data type of the elements stored in the HostValue.
  */
 template <DataType Type>
-class HostValue {
+class HostTensor {
   /**
    * @brief Internal storage structure for HostValue.
    * Instances of this class are owned by the \ref Runtime, so that they are
@@ -66,7 +66,7 @@ class HostValue {
   /**
    * @brief Default constructor for HostValue.
    */
-  HostValue() = default;
+  HostTensor() = default;
 
   /**
    * @brief Construct a new HostValue object.
@@ -76,8 +76,8 @@ class HostValue {
    * @param mapping The tile to tensor mapping.
    * @param name The name of the HostValue.
    */
-  HostValue(std::vector<Type> data, std::vector<size_t> shape,
-            poplar::Graph::TileToTensorMapping mapping, std::string name)
+  HostTensor(std::vector<Type> data, std::vector<size_t> shape,
+             poplar::Graph::TileToTensorMapping mapping, std::string name)
       : storage_(Runtime::instance().createResource<Storage>(
             std::move(data), std::move(shape), std::move(mapping),
             std::move(name))) {}
@@ -85,7 +85,7 @@ class HostValue {
   /**
    * @brief Destructor for HostValue.
    */
-  ~HostValue() {
+  ~HostTensor() {
     if (storage_ && !storage_->wasCopiedToRemote)
       Runtime::instance().freeResource(storage_);
   }
@@ -162,9 +162,9 @@ class HostValue {
   /**
    * @brief Copy the data to a remote location.
    *
-   * @return RemoteValue<Type> The remote value.
+   * @return RemoteTensor<Type> The remote value.
    */
-  RemoteValue<Type> copyToRemote() const;
+  RemoteTensor<Type> copyToRemote() const;
 };
 
 }  // namespace graphene

@@ -38,9 +38,9 @@ void Solver<Type>::factorizeCRS() {
 
   CRSFactorization factorization;
   factorization.factorizedInverseDiag =
-      std::make_unique<Value<Type>>(A.diagonalCoefficients);
+      std::make_unique<Tensor<Type>>(A.diagonalCoefficients);
   if (!config_->diagonalBased) {
-    factorization.factorizedOffDiag = Value<Type>(A.offDiagonalCoefficients);
+    factorization.factorizedOffDiag = Tensor<Type>(A.offDiagonalCoefficients);
   }
 
   if (factorizeMulticolor_) {
@@ -114,7 +114,7 @@ void Solver<Type>::factorizeCRS() {
 }
 
 template <DataType Type>
-void Solver<Type>::solveCRS(Value<Type>& x, Value<Type>& b) {
+void Solver<Type>::solveCRS(Tensor<Type>& x, Tensor<Type>& b) {
   const auto& A = this->matrix().template getImpl<crs::CRSMatrix<Type>>();
   GRAPHENE_TRACEPOINT();
   DebugInfo di("ILUSolver");
@@ -201,7 +201,7 @@ void Solver<Type>::factorize() {
 }
 
 template <DataType Type>
-SolverStats Solver<Type>::solve(Value<Type>& x, Value<Type>& b) {
+SolverStats Solver<Type>::solve(Tensor<Type>& x, Tensor<Type>& b) {
   switch (this->matrix().getFormat()) {
     case MatrixFormat::CRS:
       solveCRS(x, b);

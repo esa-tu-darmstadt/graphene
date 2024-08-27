@@ -7,8 +7,8 @@
 #include <poplar/PrintTensor.hpp>
 
 #include "CLI/CLI.hpp"
-#include "libgraphene/dsl/RemoteValue.hpp"
-#include "libgraphene/dsl/Value.hpp"
+#include "libgraphene/dsl/RemoteTensor.hpp"
+#include "libgraphene/dsl/Tensor.hpp"
 #include "libgraphene/matrix/Matrix.hpp"
 #include "libgraphene/matrix/Norm.hpp"
 #include "libgraphene/matrix/host/HostMatrix.hpp"
@@ -37,12 +37,12 @@ std::tuple<size_t, size_t, size_t> parsePoissonConfig(std::string config) {
                          std::stoi(parts[2]));
 }
 
-void load_vector(Value<float>& x, const nlohmann::json& configField,
+void load_vector(Tensor<float>& x, const nlohmann::json& configField,
                  Matrix<float>& A, bool withHalo, std::string name) {
   if (configField.is_number_float()) {
     x = configField.get<float>();
   } else if (configField.is_string()) {
-    HostValue<float> x_host = host::loadVectorFromFile<float>(
+    HostTensor<float> x_host = host::loadVectorFromFile<float>(
         configField.get<std::string>(), A.hostMatrix(), withHalo, name);
     x = x_host.copyToRemote().copyToTile();
   } else {
@@ -133,8 +133,8 @@ int main(int argc, char** argv) {
   }
   Matrix<float> A = hostA.copyToTile();
 
-  Value<float> x = A.createUninitializedVector<float>(true);
-  Value<float> b = A.createUninitializedVector<float>(false);
+  Tensor<float> x = A.createUninitializedVector<float>(true);
+  Tensor<float> b = A.createUninitializedVector<float>(false);
 
   // Initialize b
   if (config.contains("b"))

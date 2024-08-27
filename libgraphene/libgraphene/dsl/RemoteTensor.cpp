@@ -1,9 +1,8 @@
-#include "libgraphene/dsl/RemoteValue.hpp"
-
 #include <poplar/DebugContext.hpp>
 
 #include "libgraphene/common/Traits.hpp"
-#include "libgraphene/dsl/Value.hpp"
+#include "libgraphene/dsl/RemoteTensor.hpp"
+#include "libgraphene/dsl/Tensor.hpp"
 #include "libgraphene/util/Context.hpp"
 #include "libgraphene/util/DebugInfo.hpp"
 #include "libgraphene/util/PoplarHelpers.hpp"
@@ -12,7 +11,7 @@
 namespace graphene {
 
 template <DataType Type>
-Value<Type> RemoteValue<Type>::copyToTile() const {
+Tensor<Type> RemoteTensor<Type>::copyToTile() const {
   GRAPHENE_TRACEPOINT();
   DebugInfo di("RemoteValue");
   di.add("debugStr", debugStr_);
@@ -34,11 +33,11 @@ Value<Type> RemoteValue<Type>::copyToTile() const {
     Context::program().add(poplar::program::Copy(buffer, ipuTensor, di));
   }
 
-  return Value<Type>(tensor);
+  return Tensor<Type>(tensor);
 }
 
 // Explicit instantiation
-#define INSTANTIATE(T) template class RemoteValue<T>;
+#define INSTANTIATE(T) template class RemoteTensor<T>;
 
 INSTANTIATE(float)
 INSTANTIATE(bool)

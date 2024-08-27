@@ -16,7 +16,7 @@ class Solver : public solver::Solver<Type> {
  public:
   Solver(const Matrix<Type>& matrix, std::shared_ptr<Configuration> config);
 
-  SolverStats solve(Value<Type>& x, Value<Type>& b) override;
+  SolverStats solve(Tensor<Type>& x, Tensor<Type>& b) override;
 
   std::string name() const override {
     if (preconditioner_) {

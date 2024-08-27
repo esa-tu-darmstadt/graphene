@@ -35,7 +35,7 @@ void SolverStats::checkConvergence(float absTolerance, float relTolerance,
   }
 }
 
-void SolverStats::checkSingularity(Value<float> wApA, float tolerance) {
+void SolverStats::checkSingularity(Tensor<float> wApA, float tolerance) {
   GRAPHENE_TRACEPOINT();
   DebugInfo di("SolverStats");
 

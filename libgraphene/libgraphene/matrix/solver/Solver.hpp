@@ -3,7 +3,7 @@
 #include <poplar/DebugContext.hpp>
 
 #include "libgraphene/common/Concepts.hpp"
-#include "libgraphene/dsl/Value.hpp"
+#include "libgraphene/dsl/Tensor.hpp"
 #include "libgraphene/matrix/solver/Configuration.hpp"
 #include "libgraphene/matrix/solver/SolverStats.hpp"
 namespace graphene::matrix {
@@ -21,7 +21,7 @@ class Solver {
 
   const Matrix<Type>& matrix() const { return matrix_; }
 
-  virtual SolverStats solve(Value<Type>& x, Value<Type>& b) = 0;
+  virtual SolverStats solve(Tensor<Type>& x, Tensor<Type>& b) = 0;
 
   virtual std::string name() const = 0;
   virtual bool usesInitialGuess() const = 0;

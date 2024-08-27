@@ -1,4 +1,4 @@
-#include "libgraphene/dsl/Value.hpp"
+#include "libgraphene/dsl/Tensor.hpp"
 
 #include <poplar/ArrayRef.hpp>
 #include <poplar/Graph.hpp>
@@ -14,7 +14,7 @@
 #include "libgraphene/common/Traits.hpp"
 #include "libgraphene/dsl/Expression.hpp"
 #include "libgraphene/dsl/Operators.hpp"
-#include "libgraphene/dsl/RemoteValue.hpp"
+#include "libgraphene/dsl/RemoteTensor.hpp"
 #include "libgraphene/matrix/Norm.hpp"
 #include "libgraphene/util/Context.hpp"
 #include "libgraphene/util/DebugInfo.hpp"
@@ -26,8 +26,8 @@
 namespace graphene {
 
 template <DataType Type>
-Value<Type>::Value(std::vector<size_t> shape, TileMapping tileMapping,
-                   std::string name)
+Tensor<Type>::Tensor(std::vector<size_t> shape, TileMapping tileMapping,
+                     std::string name)
     : Expression<Type>(
           Context::graph().addVariable(Traits<Type>::PoplarType, shape, name)) {
   if (tileMapping.empty()) {
@@ -38,13 +38,13 @@ Value<Type>::Value(std::vector<size_t> shape, TileMapping tileMapping,
 }
 
 template <DataType Type>
-Value<Type>::Value(Type value, std::string name)
-    : Value<Type>({value}, {}, {}, name) {}
+Tensor<Type>::Tensor(Type value, std::string name)
+    : Tensor<Type>({value}, {}, {}, name) {}
 
 template <DataType Type>
-Value<Type>::Value(std::initializer_list<Type> values,
-                   std::vector<size_t> shape, TileMapping tileMapping,
-                   std::string name)
+Tensor<Type>::Tensor(std::initializer_list<Type> values,
+                     std::vector<size_t> shape, TileMapping tileMapping,
+                     std::string name)
     : Expression<Type>(Context::graph().addVariable(
           Traits<Type>::PoplarType,
           shape.empty() ? std::vector<size_t>{values.size()} : shape, name)) {
@@ -82,18 +82,18 @@ Value<Type>::Value(std::initializer_list<Type> values,
 }
 
 template <DataType Type>
-Value<Type>::Value(const poplar::Tensor tensor) : Expression<Type>(tensor) {
+Tensor<Type>::Tensor(const poplar::Tensor tensor) : Expression<Type>(tensor) {
   if (tensor.containsConstant())
     throw std::runtime_error("Tensor must not contain constants");
 }
 
 template <DataType Type>
-Value<Type>::Value(const Expression<Type> expr)
+Tensor<Type>::Tensor(const Expression<Type> expr)
   requires PoplarNativeType<Type>
-    : Value(materializeExpression(expr)) {}
+    : Tensor(materializeExpression(expr)) {}
 
 template <DataType Type>
-Value<Type> &Value<Type>::operator=(const Expression<Type> &expr)
+Tensor<Type> &Tensor<Type>::operator=(const Expression<Type> &expr)
   requires PoplarNativeType<Type>
 {
   // Materialize the expression into this tensor
@@ -102,20 +102,20 @@ Value<Type> &Value<Type>::operator=(const Expression<Type> &expr)
 }
 
 template <DataType Type>
-Value<Type> &Value<Type>::operator=(const Value &value) {
+Tensor<Type> &Tensor<Type>::operator=(const Tensor &value) {
   Context::program().add(poplar::program::Copy(value.tensor(), tensor()));
   return *this;
 }
 
 template <DataType Type>
-Value<Type>::Value(const Value &value)
-    : Value(Context::graph().clone(value.tensor())) {
+Tensor<Type>::Tensor(const Tensor &value)
+    : Tensor(Context::graph().clone(value.tensor())) {
   // Use the assignment operator to copy the tensor
   *this = value;
 }
 
 template <DataType Type>
-const TileMapping &Value<Type>::tileMapping() const {
+const TileMapping &Tensor<Type>::tileMapping() const {
   if (!tileMapping_) {
     tileMapping_ = Context::graph().getTileMapping(tensor());
   }
@@ -123,7 +123,7 @@ const TileMapping &Value<Type>::tileMapping() const {
 }
 
 template <DataType Type>
-const std::vector<size_t> &Value<Type>::shape() const {
+const std::vector<size_t> &Tensor<Type>::shape() const {
   if (!shape_) {
     shape_ = Expression<Type>::shape();
   }
@@ -131,7 +131,7 @@ const std::vector<size_t> &Value<Type>::shape() const {
 }
 
 template <DataType Type>
-poplar::Tensor Value<Type>::tensor(bool flattenIfScalar) const {
+poplar::Tensor Tensor<Type>::tensor(bool flattenIfScalar) const {
   assert(this->placeholders().size() == 1);
   poplar::Tensor tensor = this->placeholders()[0];
   if (flattenIfScalar && tensor.numElements() == 1) return tensor.flatten()[0];
@@ -139,8 +139,8 @@ poplar::Tensor Value<Type>::tensor(bool flattenIfScalar) const {
 }
 
 template <DataType Type>
-poplar::Tensor Value<Type>::tensorOnTile(size_t tile,
-                                         bool flattenIfScalar) const {
+poplar::Tensor Tensor<Type>::tensorOnTile(size_t tile,
+                                          bool flattenIfScalar) const {
   assert(this->placeholders().size() == 1);
 
   if (this->shape().empty()) return poplar::Tensor();
@@ -162,7 +162,7 @@ poplar::Tensor Value<Type>::tensorOnTile(size_t tile,
 }
 
 template <DataType Type>
-void Value<Type>::print(std::string name, poplar::PrintTensorFmt fmt) const {
+void Tensor<Type>::print(std::string name, poplar::PrintTensorFmt fmt) const {
   DebugInfo di("name", DI_ARGS(name));
   auto ipuIntervals = calculateIPUIntervals(tileMapping());
   if (name.empty()) name = "<unnamed>";
@@ -183,7 +183,7 @@ void Value<Type>::print(std::string name, poplar::PrintTensorFmt fmt) const {
 }
 
 template <DataType Type>
-RemoteValue<Type> Value<Type>::copyToRemote() const {
+RemoteTensor<Type> Tensor<Type>::copyToRemote() const {
   GRAPHENE_TRACEPOINT();
   DebugInfo di("RemoteValue", DI_ARGS(tensor()));
 
@@ -205,13 +205,13 @@ RemoteValue<Type> Value<Type>::copyToRemote() const {
     buffers.push_back(buffer);
   }
 
-  return RemoteValue<Type>(buffers, tileMapping, tensor.shape(),
-                           tensor.getDebugStr());
+  return RemoteTensor<Type>(buffers, tileMapping, tensor.shape(),
+                            tensor.getDebugStr());
 }
 
 template <DataType Type>
-Value<Type> Value<Type>::reduce(const std::vector<size_t> dims,
-                                popops::ReduceParams params) const
+Tensor<Type> Tensor<Type>::reduce(const std::vector<size_t> dims,
+                                  popops::ReduceParams params) const
   requires PoplarNativeType<Type>
 {
   GRAPHENE_TRACEPOINT();
@@ -221,11 +221,11 @@ Value<Type> Value<Type>::reduce(const std::vector<size_t> dims,
   poplar::Tensor reduced = popops::reduce(Context::graph(), tensor, dims,
                                           params, Context::program(), di);
   di.addOutput(reduced);
-  return Value<Type>(reduced);
+  return Tensor<Type>(reduced);
 }
 
 template <DataType Type>
-Expression<Type> Value<Type>::norm(VectorNorm type) const
+Expression<Type> Tensor<Type>::norm(VectorNorm type) const
   requires PoplarNativeType<Type>
 {
   GRAPHENE_TRACEPOINT();
@@ -244,7 +244,7 @@ Expression<Type> Value<Type>::norm(VectorNorm type) const
   }
 }
 
-Value<float> unrollTwoFloatValue(const Value<double> &value) {
+Tensor<float> unrollTwoFloatValue(const Tensor<double> &value) {
   GRAPHENE_TRACEPOINT();
   DebugInfo di("Value", DI_ARGS(value.tensor()));
   auto &graph = Context::graph();
@@ -261,7 +261,7 @@ Value<float> unrollTwoFloatValue(const Value<double> &value) {
     }
   }
 
-  Value<float> unrolled(resultShape, resultMapping);
+  Tensor<float> unrolled(resultShape, resultMapping);
 
   poplar::ComputeSet cs = graph.addComputeSet(di);
   for (size_t tile = 0; tile < value.tileMapping().size(); ++tile) {
@@ -290,7 +290,7 @@ Value<float> unrollTwoFloatValue(const Value<double> &value) {
 
 template <DataType Type>
 template <typename DestType>
-Value<DestType> Value<Type>::cast() const
+Tensor<DestType> Tensor<Type>::cast() const
   requires std::is_same_v<Type, doubleword> && std::is_same_v<DestType, float>
 {
   GRAPHENE_TRACEPOINT();
@@ -299,7 +299,7 @@ Value<DestType> Value<Type>::cast() const
   auto &graph = Context::graph();
   auto &program = Context::program();
 
-  Value<float> casted(this->shape(), this->tileMapping());
+  Tensor<float> casted(this->shape(), this->tileMapping());
 
   poplar::ComputeSet cs = graph.addComputeSet(di);
   for (size_t tile = 0; tile < tileMapping().size(); ++tile) {
@@ -325,7 +325,7 @@ Value<DestType> Value<Type>::cast() const
 }
 template <DataType Type>
 template <typename DestType>
-Value<DestType> Value<Type>::cast() const
+Tensor<DestType> Tensor<Type>::cast() const
   requires std::is_same_v<Type, float> && std::is_same_v<DestType, doubleword>
 {
   GRAPHENE_TRACEPOINT();
@@ -334,7 +334,7 @@ Value<DestType> Value<Type>::cast() const
   auto &graph = Context::graph();
   auto &program = Context::program();
 
-  Value<doubleword> casted(this->shape(), this->tileMapping());
+  Tensor<doubleword> casted(this->shape(), this->tileMapping());
 
   poplar::ComputeSet cs = graph.addComputeSet(di);
   for (size_t tile = 0; tile < tileMapping().size(); ++tile) {
@@ -361,7 +361,7 @@ Value<DestType> Value<Type>::cast() const
 
 template <DataType Type>
 template <typename DestType>
-Value<DestType> Value<Type>::cast() const
+Tensor<DestType> Tensor<Type>::cast() const
   requires std::is_same_v<Type, double> && std::is_same_v<DestType, float>
 {
   GRAPHENE_TRACEPOINT();
@@ -370,7 +370,7 @@ Value<DestType> Value<Type>::cast() const
   auto &graph = Context::graph();
   auto &program = Context::program();
 
-  Value<float> casted(this->shape(), this->tileMapping());
+  Tensor<float> casted(this->shape(), this->tileMapping());
 
   poplar::ComputeSet cs = graph.addComputeSet(di);
   for (size_t tile = 0; tile < tileMapping().size(); ++tile) {
@@ -396,7 +396,7 @@ Value<DestType> Value<Type>::cast() const
 }
 template <DataType Type>
 template <typename DestType>
-Value<DestType> Value<Type>::cast() const
+Tensor<DestType> Tensor<Type>::cast() const
   requires std::is_same_v<Type, float> && std::is_same_v<DestType, double>
 {
   GRAPHENE_TRACEPOINT();
@@ -405,7 +405,7 @@ Value<DestType> Value<Type>::cast() const
   auto &graph = Context::graph();
   auto &program = Context::program();
 
-  Value<double> casted(this->shape(), this->tileMapping());
+  Tensor<double> casted(this->shape(), this->tileMapping());
 
   poplar::ComputeSet cs = graph.addComputeSet(di);
   for (size_t tile = 0; tile < tileMapping().size(); ++tile) {
@@ -431,7 +431,7 @@ Value<DestType> Value<Type>::cast() const
 }
 
 // Explicit instantiation
-#define INSTANTIATE(T) template class Value<T>;
+#define INSTANTIATE(T) template class Tensor<T>;
 
 INSTANTIATE(float)
 INSTANTIATE(double)
@@ -446,7 +446,7 @@ INSTANTIATE(int32_t)
 #undef INSTANTIATE
 
 // Instantiate the cast methods from double to float and vice versa
-#define INSTANTIATE(T, U) template Value<U> Value<T>::cast<U>() const;
+#define INSTANTIATE(T, U) template Tensor<U> Tensor<T>::cast<U>() const;
 
 INSTANTIATE(doubleword, float)
 INSTANTIATE(float, doubleword)

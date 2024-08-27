@@ -4,8 +4,8 @@
 #include <poputil/VertexTemplates.hpp>
 
 #include "libgraphene/dsl/Expression.hpp"
+#include "libgraphene/dsl/Tensor.hpp"
 #include "libgraphene/dsl/Traits.hpp"
-#include "libgraphene/dsl/Value.hpp"
 #include "libgraphene/dsl/details/OperatorTraits.hpp"
 #include "libgraphene/util/Context.hpp"
 #include "libgraphene/util/DebugInfo.hpp"
@@ -31,12 +31,12 @@ Expression<DataT> wrapInExpression(const T &value) {
 }
 
 template <DataType T>
-Value<T> wrapInValue(T value) {
-  return Value<T>(value);
+Tensor<T> wrapInValue(T value) {
+  return Tensor<T>(value);
 }
 
 template <DataType T>
-const Value<T> &wrapInValue(const Value<T> &value) {
+const Tensor<T> &wrapInValue(const Tensor<T> &value) {
   return value;
 }
 
@@ -195,12 +195,12 @@ GRAPHENE_DEFINE_EXPR_BINARY_OP(VarianceToInvStdDev, VARIANCE_TO_INV_STD_DEV)
 
 namespace ops {
 
-template <DataTypeOrValue T1, DataTypeOrValue T2>
-  requires AtLeastOneValue<T1, T2> && AtLeastOneTwoFloatTypeOrValue<T1, T2> &&
+template <DataTypeOrTensor T1, DataTypeOrTensor T2>
+  requires AtLeastOneTensor<T1, T2> && AtLeastOneTwoFloatTypeOrTensor<T1, T2> &&
            CompatibleTypesForBinaryOp<popops::expr::BinaryOpType::ADD, T1, T2>
 auto Add(const T1 &lhs, const T2 &rhs) {
-  // When a Value<Type> is passed, the type is a **const reference** to the
-  // Value. When a DataType is passed, the type is Value<Type>.
+  // When a Tensor<Type> is passed, the type is a **const reference** to the
+  // Value. When a DataType is passed, the type is Tensor<Type>.
   decltype(detail::wrapInValue(lhs)) lhsValue = detail::wrapInValue(lhs);
   decltype(detail::wrapInValue(rhs)) rhsValue = detail::wrapInValue(rhs);
 
@@ -217,7 +217,7 @@ auto Add(const T1 &lhs, const T2 &rhs) {
 
   // FIXME: Get the broadcasted tile mapping
   poplar::Graph::TileToTensorMapping outMapping = lhsValue.tileMapping();
-  Value<ResultType> outValue(*outShape, outMapping);
+  Tensor<ResultType> outValue(*outShape, outMapping);
 
   std::string codeletName = poputil::templateVertex(
       "graphene::ops::AddDoubleWord", lhsValue.tensor().elementType(),
@@ -244,13 +244,13 @@ auto Add(const T1 &lhs, const T2 &rhs) {
   return outValue;
 }
 
-template <DataTypeOrValue T1, DataTypeOrValue T2>
-  requires AtLeastOneValue<T1, T2> &&
-           AtLeastOneDoublePrecisionTypeOrValue<T1, T2> &&
+template <DataTypeOrTensor T1, DataTypeOrTensor T2>
+  requires AtLeastOneTensor<T1, T2> &&
+           AtLeastOneDoublePrecisionTypeOrTensor<T1, T2> &&
            CompatibleTypesForBinaryOp<popops::expr::BinaryOpType::ADD, T1, T2>
 auto Add(const T1 &lhs, const T2 &rhs) {
-  // When a Value<Type> is passed, the type is a **const reference** to the
-  // Value. When a DataType is passed, the type is Value<Type>.
+  // When a Tensor<Type> is passed, the type is a **const reference** to the
+  // Value. When a DataType is passed, the type is Tensor<Type>.
   decltype(detail::wrapInValue(lhs)) lhsValue = detail::wrapInValue(lhs);
   decltype(detail::wrapInValue(rhs)) rhsValue = detail::wrapInValue(rhs);
 
@@ -267,7 +267,7 @@ auto Add(const T1 &lhs, const T2 &rhs) {
 
   // FIXME: Get the broadcasted tile mapping
   poplar::Graph::TileToTensorMapping outMapping = lhsValue.tileMapping();
-  Value<ResultType> outValue(*outShape, outMapping);
+  Tensor<ResultType> outValue(*outShape, outMapping);
 
   std::string codeletName = poputil::templateVertex(
       "graphene::ops::AddDoublePrecision", lhsValue.tensor().elementType(),

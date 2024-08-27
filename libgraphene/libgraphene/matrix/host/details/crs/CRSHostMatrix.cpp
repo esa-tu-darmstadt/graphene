@@ -11,12 +11,12 @@
 #include <poplar/Graph.hpp>
 #include <stdexcept>
 
-#include "libgraphene/dsl/HostValue.hpp"
-#include "libgraphene/dsl/HostValueVariant.hpp"
-#include "libgraphene/dsl/RemoteValue.hpp"
-#include "libgraphene/dsl/RemoteValueVariant.hpp"
-#include "libgraphene/dsl/Value.hpp"
-#include "libgraphene/dsl/ValueVariant.hpp"
+#include "libgraphene/dsl/HostTensor.hpp"
+#include "libgraphene/dsl/HostTensorVariant.hpp"
+#include "libgraphene/dsl/RemoteTensor.hpp"
+#include "libgraphene/dsl/RemoteTensorVariant.hpp"
+#include "libgraphene/dsl/Tensor.hpp"
+#include "libgraphene/dsl/TensorVariant.hpp"
 #include "libgraphene/matrix/Matrix.hpp"
 #include "libgraphene/matrix/details/crs/CRSAddressing.hpp"
 #include "libgraphene/matrix/host/HostMatrix.hpp"
@@ -70,7 +70,7 @@ void constructHostValueForType(graphene::HostValueVariant<Types...> &hostValue,
   spdlog::trace(
       "Constructing host value for {} of type {} for {} tiles with {} datums.",
       name, typeName, numTiles, numValues);
-  hostValue = graphene::HostValue<ConcreteType>(
+  hostValue = graphene::HostTensor<ConcreteType>(
       std::move(concreteData), std::move(shape), std::move(tileMapping), name);
 }
 
@@ -465,7 +465,7 @@ void CRSHostMatrix<Type>::decomposeValues() {
 }
 
 template <DataType Type>
-HostValue<Type> CRSHostMatrix<Type>::decomposeOffDiagCoefficients(
+HostTensor<Type> CRSHostMatrix<Type>::decomposeOffDiagCoefficients(
     const std::vector<Type> &values) const {
   std::vector<Type> decomposedValues;
   decomposedValues.reserve(colInd_.numElements());
@@ -515,8 +515,8 @@ HostValue<Type> CRSHostMatrix<Type>::decomposeOffDiagCoefficients(
   }
 
   std::vector<size_t> shape = {numElements};
-  return HostValue<Type>(std::move(decomposedValues), std::move(shape),
-                         std::move(mapping), this->name_ + "_offDiag");
+  return HostTensor<Type>(std::move(decomposedValues), std::move(shape),
+                          std::move(mapping), this->name_ + "_offDiag");
 }
 
 template <DataType Type>

@@ -15,20 +15,20 @@ struct is_expression : std::false_type {};
 template <typename T>
 struct is_expression<Expression<T>> : std::true_type {};
 template <typename T>
-struct is_expression<Value<T>> : std::true_type {};
+struct is_expression<Tensor<T>> : std::true_type {};
 template <typename T>
 inline constexpr bool is_expression_v = is_expression<T>::value;
 
 /**
- * @brief Type trait to check if a type is an Value.
+ * @brief Type trait to check if a type is an Tensor.
  * @tparam T The type to check.
  */
 template <typename T>
-struct is_value : std::false_type {};
+struct is_tensor : std::false_type {};
 template <typename T>
-struct is_value<Value<T>> : std::true_type {};
+struct is_tensor<Tensor<T>> : std::true_type {};
 template <typename T>
-inline constexpr bool is_value_v = is_value<T>::value;
+inline constexpr bool is_tensor_v = is_tensor<T>::value;
 
 /**
  * @brief Type trait to unwrap an expression type. If the type is not an
@@ -45,7 +45,7 @@ struct unwrap_expression<Expression<T>> {
   using type = T;
 };
 template <DataType T>
-struct unwrap_expression<Value<T>> {
+struct unwrap_expression<Tensor<T>> {
   using type = T;
 };
 
@@ -75,9 +75,9 @@ concept PoplarNativeTypeOrExpression =
  * @tparam T The type to check.
  */
 template <typename T>
-concept TwoFloatTypeOrValue =
+concept TwoFloatTypeOrTensor =
     TwoFloatType<T> ||
-    (is_value_v<T> && TwoFloatType<typename unwrap_expression<T>::type>);
+    (is_tensor_v<T> && TwoFloatType<typename unwrap_expression<T>::type>);
 
 /**
  * @brief Concept to check if a type is a double precision type or an \ref
@@ -85,9 +85,10 @@ concept TwoFloatTypeOrValue =
  * @tparam T The type to check.
  */
 template <typename T>
-concept DoublePrecisionTypeOrValue =
+concept DoublePrecisionTypeOrTensor =
     DoublePrecisionType<T> ||
-    (is_value_v<T> && DoublePrecisionType<typename unwrap_expression<T>::type>);
+    (is_tensor_v<T> &&
+     DoublePrecisionType<typename unwrap_expression<T>::type>);
 
 /**
  * @brief Concept to check if a type is a \ref DataType type or an \ref
@@ -95,9 +96,9 @@ concept DoublePrecisionTypeOrValue =
  * @tparam T The type to check.
  */
 template <typename T>
-concept DataTypeOrValue =
+concept DataTypeOrTensor =
     DataType<T> ||
-    (is_value_v<T> && DataType<typename unwrap_expression<T>::type>);
+    (is_tensor_v<T> && DataType<typename unwrap_expression<T>::type>);
 
 /**
  * @brief Concept to ensure at least one operand is an Expression, the other
@@ -109,20 +110,20 @@ concept AtLeastOneExpression =
     (DataTypeOrExpression<T1> && is_expression_v<T2>);
 
 template <typename T1, typename T2>
-concept AtLeastOneTwoFloatTypeOrValue =
-    (TwoFloatTypeOrValue<T1> || TwoFloatTypeOrValue<T2>);
+concept AtLeastOneTwoFloatTypeOrTensor =
+    (TwoFloatTypeOrTensor<T1> || TwoFloatTypeOrTensor<T2>);
 
 template <typename T1, typename T2>
-concept AtLeastOneDoublePrecisionTypeOrValue =
-    (DoublePrecisionTypeOrValue<T1> || DoublePrecisionTypeOrValue<T2>);
+concept AtLeastOneDoublePrecisionTypeOrTensor =
+    (DoublePrecisionTypeOrTensor<T1> || DoublePrecisionTypeOrTensor<T2>);
 
 /**
- * @brief Concept to ensure at least one operand is an Value, the other
+ * @brief Concept to ensure at least one operand is an Tensor, the other
  * can be a DataType.
  */
 template <typename T1, typename T2>
-concept AtLeastOneValue = (is_value_v<T1> && DataTypeOrExpression<T2>) ||
-                          (DataTypeOrExpression<T1> && is_value_v<T2>);
+concept AtLeastOneTensor = (is_tensor_v<T1> && DataTypeOrExpression<T2>) ||
+                           (DataTypeOrExpression<T1> && is_tensor_v<T2>);
 
 /** @brief Concept to check if the unwrapped data types of two expressions are
  * the same.

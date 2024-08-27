@@ -29,8 +29,8 @@ namespace graphene::matrix::solver::iterativerefinement {
 
 template <DataType Type>
 template <DataType ExtendedPrecisionType>
-SolverStats Solver<Type>::solveMixedPrecision(Value<Type>& x,
-                                              Value<Type>& b) const {
+SolverStats Solver<Type>::solveMixedPrecision(Tensor<Type>& x,
+                                              Tensor<Type>& b) const {
   GRAPHENE_TRACEPOINT();
   spdlog::debug("Solving with mixed precision iterative refinement");
   DebugInfo di("IterativeRefinementSolver");
@@ -44,12 +44,12 @@ SolverStats Solver<Type>::solveMixedPrecision(Value<Type>& x,
     stats.bNorm = A.vectorNorm(config_->norm, b);
 
   // Calculate the initial residual
-  Value<Type> residual = A.residual(x, b);
+  Tensor<Type> residual = A.residual(x, b);
   stats.initialResidual = A.vectorNorm(config_->norm, residual);
   stats.finalResidual = stats.initialResidual;
 
   // Create a double precision vector
-  Value<ExtendedPrecisionType> xDouble =
+  Tensor<ExtendedPrecisionType> xDouble =
       x.template cast<ExtendedPrecisionType>();
 
   auto terminate =
@@ -100,8 +100,8 @@ SolverStats Solver<Type>::solveMixedPrecision(Value<Type>& x,
 }
 
 template <DataType Type>
-SolverStats Solver<Type>::solveSinglePrecision(Value<Type>& x,
-                                               Value<Type>& b) const {
+SolverStats Solver<Type>::solveSinglePrecision(Tensor<Type>& x,
+                                               Tensor<Type>& b) const {
   GRAPHENE_TRACEPOINT();
   spdlog::debug("Solving with single precision iterative refinement");
   DebugInfo di("IterativeRefinementSolver");
@@ -115,7 +115,7 @@ SolverStats Solver<Type>::solveSinglePrecision(Value<Type>& x,
     stats.bNorm = A.vectorNorm(config_->norm, b);
 
   // Calculate the initial residual
-  Value<Type> residual = A.residual(x, b);
+  Tensor<Type> residual = A.residual(x, b);
   stats.initialResidual = A.vectorNorm(config_->norm, residual);
   stats.finalResidual = stats.initialResidual;
 
@@ -126,7 +126,7 @@ SolverStats Solver<Type>::solveSinglePrecision(Value<Type>& x,
   cf::While(!terminate, [&]() {
     stats.iterations = stats.iterations + 1;
 
-    Value<Type> correction = A.template createUninitializedVector<Type>(true);
+    Tensor<Type> correction = A.template createUninitializedVector<Type>(true);
     // Reset the initial guess to zero if the inner solver uses it
     if (innerSolver_->usesInitialGuess()) correction = 0;
 
@@ -153,7 +153,7 @@ SolverStats Solver<Type>::solveSinglePrecision(Value<Type>& x,
 }
 
 template <DataType Type>
-SolverStats Solver<Type>::solve(Value<Type>& x, Value<Type>& b) {
+SolverStats Solver<Type>::solve(Tensor<Type>& x, Tensor<Type>& b) {
   GRAPHENE_TRACEPOINT();
 
   const Matrix<Type>& A = this->matrix();

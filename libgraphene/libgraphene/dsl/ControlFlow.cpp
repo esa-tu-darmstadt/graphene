@@ -21,7 +21,7 @@ void graphene::cf::If(Expression<bool> condition,
   auto &program = Context::program();
   DebugInfo di("cf");
 
-  Value<bool> predicate = condition;
+  Tensor<bool> predicate = condition;
 
   poplar::program::Sequence trueSeq, falseSeq, conditionSeq;
   {
@@ -46,7 +46,7 @@ void graphene::cf::While(Expression<bool> condition,
   auto &program = Context::program();
   DebugInfo di("cf");
 
-  Value<bool> predicate;
+  Tensor<bool> predicate;
 
   poplar::program::Sequence conditionProg;
   {
@@ -77,7 +77,7 @@ void graphene::cf::Repeat(int count, std::function<void()> body) {
   program.add(poplar::program::Repeat(count, seq, di));
 }
 
-Value<unsigned> graphene::cf::Time(std::function<void()> body, size_t tile) {
+Tensor<unsigned> graphene::cf::Time(std::function<void()> body, size_t tile) {
   DebugInfo di("cf");
   poplar::program::Sequence seq;
   {
@@ -92,14 +92,14 @@ Value<unsigned> graphene::cf::Time(std::function<void()> body, size_t tile) {
 
   Context::program().add(seq);
 
-  return Value<unsigned>(tensor.slice(0, 1));
+  return Tensor<unsigned>(tensor.slice(0, 1));
 }
 
 template <DataType RetType>
-std::tuple<Value<RetType>, Value<unsigned>> graphene::cf::Time(
-    std::function<Value<RetType>()> body, size_t tile) {
+std::tuple<Tensor<RetType>, Tensor<unsigned>> graphene::cf::Time(
+    std::function<Tensor<RetType>()> body, size_t tile) {
   DebugInfo di("cf");
-  std::optional<Value<RetType>> result;
+  std::optional<Tensor<RetType>> result;
   poplar::program::Sequence seq;
   {
     Context context(seq);
@@ -113,12 +113,12 @@ std::tuple<Value<RetType>, Value<unsigned>> graphene::cf::Time(
 
   Context::program().add(seq);
 
-  return {*result, Value<unsigned>(tensor.slice(0, 1))};
+  return {*result, Tensor<unsigned>(tensor.slice(0, 1))};
 }
 
 // Explicit instantiations
-#define INSTANTIATE_TIME_AND_RETURN(TYPE)                                     \
-  template std::tuple<Value<TYPE>, Value<unsigned>> graphene::cf::Time<TYPE>( \
-      std::function<Value<TYPE>()>, size_t);
+#define INSTANTIATE_TIME_AND_RETURN(TYPE)             \
+  template std::tuple<Tensor<TYPE>, Tensor<unsigned>> \
+      graphene::cf::Time<TYPE>(std::function<Tensor<TYPE>()>, size_t);
 
 INSTANTIATE_TIME_AND_RETURN(float)

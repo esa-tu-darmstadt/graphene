@@ -5,7 +5,7 @@
 
 namespace graphene::matrix {
 template <DataType Type>
-void Matrix<Type>::solve(Value<Type> &x, Value<Type> &b,
+void Matrix<Type>::solve(Tensor<Type> &x, Tensor<Type> &b,
                          std::shared_ptr<solver::Configuration> &config) {
   auto solver = solver::Solver<Type>::createSolver(*this, config);
   solver->solve(x, b);

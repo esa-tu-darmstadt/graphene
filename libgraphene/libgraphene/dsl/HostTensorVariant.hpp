@@ -4,7 +4,7 @@
 #include <variant>
 
 #include "libgraphene/common/Concepts.hpp"
-#include "libgraphene/dsl/HostValue.hpp"
+#include "libgraphene/dsl/HostTensor.hpp"
 
 namespace graphene {
 template <DataType... Types>
@@ -14,14 +14,14 @@ class RemoteValueVariant;
  * @class HostValueVariant
  * @brief A class representing a \ref HostValue of any of the given types.
  *
- * This class is a variant of HostValue<Types> for all given types.
+ * This class is a variant of HostTensor<Types> for all given types.
  *
  * @tparam Types The types of host values that can be stored in the variant.
  */
 template <DataType... Types>
 class HostValueVariant {
-  using InnerType = std::variant<HostValue<Types>...>;
-  using RemoteValueInnerType = std::variant<RemoteValue<Types>...>;
+  using InnerType = std::variant<HostTensor<Types>...>;
+  using RemoteValueInnerType = std::variant<RemoteTensor<Types>...>;
   using RemoteValueType = RemoteValueVariant<Types...>;
   InnerType value_;
 
@@ -47,7 +47,7 @@ class HostValueVariant {
    */
   template <typename T>
     requires(std::is_same_v<T, Types> || ...)
-  HostValueVariant &operator=(HostValue<T> value) {
+  HostValueVariant &operator=(HostTensor<T> value) {
     value_ = std::move(value);
     return *this;
   }

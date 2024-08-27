@@ -10,7 +10,7 @@
 namespace graphene {
 
 template <DataType Type>
-class Value;
+class Tensor;
 
 /**
  * @brief Represents an expression consisting of operations, constants, and
@@ -104,19 +104,19 @@ class Expression {
  *
  * @tparam Type The data type of the expression.
  * @param expr The expression to materialize.
- * @return Value<Type> The materialized value.
+ * @return Tensor<Type> The materialized value.
  */
 template <PoplarNativeType Type>
-Value<Type> materializeExpression(const Expression<Type> &expr);
+Tensor<Type> materializeExpression(const Expression<Type> &expr);
 
 /**
  * @brief Materializes an expression into an existing \ref Value.
  *
  * @tparam Type The data type of the expression.
  * @param expr The expression to materialize.
- * @return Value<Type> The materialized value.
+ * @return Tensor<Type> The materialized value.
  */
 template <PoplarNativeType Type>
-void materializeExpression(const Expression<Type> &expr, Value<Type> &dest);
+void materializeExpression(const Expression<Type> &expr, Tensor<Type> &dest);
 
 }  // namespace graphene
