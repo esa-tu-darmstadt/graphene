@@ -1,10 +1,10 @@
-#include "libgraphene/dsl/HostTensor.hpp"
+#include "libgraphene/dsl/tensor/HostTensor.hpp"
 
 #include <spdlog/spdlog.h>
 
 #include <poplar/DataStream.hpp>
 
-#include "libgraphene/dsl/RemoteTensor.hpp"
+#include "libgraphene/dsl/tensor/RemoteTensor.hpp"
 #include "libgraphene/util/Context.hpp"
 #include "libgraphene/util/PoplarHelpers.hpp"
 #include "libgraphene/util/Runtime.hpp"

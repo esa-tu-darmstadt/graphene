@@ -23,4 +23,4 @@ add_library(GrapheneMatrix SHARED
     "solver/pbicgstab/Configuration.cpp"
     "solver/restarter/Solver.cpp"
     "solver/restarter/Configuration.cpp")
-target_link_libraries(GrapheneMatrix PRIVATE GrapheneCommon GrapheneUtil GrapheneDSL nlohmann_json::nlohmann_json fast_matrix_market::fast_matrix_market)
+target_link_libraries(GrapheneMatrix PRIVATE GrapheneCommon GrapheneUtil GrapheneTensorDSL nlohmann_json::nlohmann_json fast_matrix_market::fast_matrix_market)

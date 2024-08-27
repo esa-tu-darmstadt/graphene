@@ -3,7 +3,7 @@
 
 #include "libgraphene/common/Type.hpp"
 
-namespace graphene::codelet::dsl {
+namespace graphene::codedsl {
 
 /**
  * @brief Represents the poplar::Vector type from the Poplar runtime.
@@ -66,4 +66,4 @@ class VertexInOutType : public Type {
   Direction direction_;
 };
 
-}  // namespace graphene::codelet::dsl
+}  // namespace graphene::codedsl

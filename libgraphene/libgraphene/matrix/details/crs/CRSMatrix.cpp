@@ -8,7 +8,7 @@
 #include <poputil/VertexTemplates.hpp>
 #include <type_traits>
 
-#include "libgraphene/dsl/Operators.hpp"
+#include "libgraphene/dsl/tensor/Operators.hpp"
 #include "libgraphene/util/Context.hpp"
 #include "libgraphene/util/DebugInfo.hpp"
 #include "libgraphene/util/PoplarHelpers.hpp"

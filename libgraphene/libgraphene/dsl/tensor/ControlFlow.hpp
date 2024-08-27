@@ -3,7 +3,7 @@
 #include <functional>
 #include <tuple>
 
-#include "libgraphene/dsl/Tensor.hpp"
+#include "libgraphene/dsl/tensor/Tensor.hpp"
 
 namespace graphene::cf {
 /**

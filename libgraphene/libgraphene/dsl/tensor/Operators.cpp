@@ -1,4 +1,4 @@
-#include "libgraphene/dsl/Operators.hpp"
+#include "libgraphene/dsl/tensor/Operators.hpp"
 
 #include <iostream>
 

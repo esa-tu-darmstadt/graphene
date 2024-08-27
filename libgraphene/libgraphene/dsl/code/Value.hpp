@@ -8,7 +8,7 @@
 #include "libgraphene/common/Concepts.hpp"
 #include "libgraphene/common/Type.hpp"
 
-namespace graphene::codelet::dsl {
+namespace graphene::codedsl {
 
 /**
  * @brief Represents a value in the CodeDSL language.
@@ -158,4 +158,4 @@ class Expression : public Value {
   Expression(TypeRef type, std::string expr);
 };
 
-}  // namespace graphene::codelet::dsl
+}  // namespace graphene::codedsl

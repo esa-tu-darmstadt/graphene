@@ -1,4 +1,4 @@
-#include "libgraphene/dsl/ControlFlow.hpp"
+#include "libgraphene/dsl/tensor/ControlFlow.hpp"
 
 #include <spdlog/spdlog.h>
 

@@ -5,7 +5,7 @@
 #include <poplar/DebugContext.hpp>
 #include <variant>
 
-#include "libgraphene/dsl/Tensor.hpp"
+#include "libgraphene/dsl/tensor/Tensor.hpp"
 #include "libgraphene/matrix/details/MatrixBase.hpp"
 #include "libgraphene/matrix/details/crs/CRSMatrix.hpp"
 

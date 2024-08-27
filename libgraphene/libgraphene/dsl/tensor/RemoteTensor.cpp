@@ -1,8 +1,9 @@
+#include "libgraphene/dsl/tensor/RemoteTensor.hpp"
+
 #include <poplar/DebugContext.hpp>
 
 #include "libgraphene/common/Traits.hpp"
-#include "libgraphene/dsl/RemoteTensor.hpp"
-#include "libgraphene/dsl/Tensor.hpp"
+#include "libgraphene/dsl/tensor/Tensor.hpp"
 #include "libgraphene/util/Context.hpp"
 #include "libgraphene/util/DebugInfo.hpp"
 #include "libgraphene/util/PoplarHelpers.hpp"

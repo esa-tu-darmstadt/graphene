@@ -2,7 +2,7 @@
 
 #include <variant>
 
-#include "libgraphene/dsl/Expression.hpp"
+#include "libgraphene/dsl/tensor/Expression.hpp"
 
 namespace graphene {
 

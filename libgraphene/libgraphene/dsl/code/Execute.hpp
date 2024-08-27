@@ -6,14 +6,14 @@
 
 #include "libgraphene/common/Helpers.hpp"
 #include "libgraphene/common/Type.hpp"
-#include "libgraphene/dsl/codelet/ControlFlow.hpp"
-#include "libgraphene/dsl/codelet/Function.hpp"
-#include "libgraphene/dsl/codelet/Vertex.hpp"
-#include "libgraphene/dsl/codelet/VertexTypes.hpp"
+#include "libgraphene/dsl/code/ControlFlow.hpp"
+#include "libgraphene/dsl/code/Function.hpp"
+#include "libgraphene/dsl/code/Vertex.hpp"
+#include "libgraphene/dsl/code/VertexTypes.hpp"
 #include "libgraphene/util/Context.hpp"
 #include "libgraphene/util/DebugInfo.hpp"
 #include "libgraphene/util/PoplarHelpers.hpp"
-namespace graphene::codelet::dsl {
+namespace graphene::codedsl {
 /**
  * @brief Executes the provided code function on each tile, operating on the
  * slices of the given tensors that are mapped to the tile.
@@ -114,4 +114,4 @@ void ExecuteAsMapped(std::vector<poplar::Tensor> tensors,
   // Add the compute set to the program
   Context::program().add(poplar::program::Execute(cs, di));
 }
-}  // namespace graphene::codelet::dsl
+}  // namespace graphene::codedsl

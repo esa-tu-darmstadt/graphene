@@ -4,7 +4,7 @@
 #include <poplar/DebugContext.hpp>
 #include <string>
 
-#include "libgraphene/dsl/Tensor.hpp"
+#include "libgraphene/dsl/tensor/Tensor.hpp"
 #include "libgraphene/matrix/Norm.hpp"
 namespace graphene::matrix::solver {
 struct SolverStats {

@@ -3,7 +3,7 @@
 #include <variant>
 
 #include "libgraphene/common/Concepts.hpp"
-#include "libgraphene/dsl/Tensor.hpp"
+#include "libgraphene/dsl/tensor/Tensor.hpp"
 
 namespace graphene {
 

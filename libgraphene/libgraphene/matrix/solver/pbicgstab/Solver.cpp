@@ -2,8 +2,8 @@
 
 #include <spdlog/spdlog.h>
 
-#include "libgraphene/dsl/ControlFlow.hpp"
-#include "libgraphene/dsl/Operators.hpp"
+#include "libgraphene/dsl/tensor/ControlFlow.hpp"
+#include "libgraphene/dsl/tensor/Operators.hpp"
 #include "libgraphene/matrix/Matrix.hpp"
 #include "libgraphene/matrix/solver/SolverStats.hpp"
 #include "libgraphene/util/Context.hpp"

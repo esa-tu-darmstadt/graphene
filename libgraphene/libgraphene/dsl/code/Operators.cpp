@@ -2,7 +2,7 @@
 
 #include <spdlog/spdlog.h>
 
-namespace graphene::codelet::dsl::detail {
+namespace graphene::codedsl::detail {
 
 TypeRef largerType(TypeRef a, TypeRef b) {
   if (a->size() > b->size()) return a;
@@ -244,4 +244,4 @@ std::string_view to_string(TernaryOpType op) {
   throw std::runtime_error("Unsupported ternary operation type");
 }
 
-}  // namespace graphene::codelet::dsl::detail
+}  // namespace graphene::codedsl::detail

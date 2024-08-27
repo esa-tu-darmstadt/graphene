@@ -3,11 +3,11 @@
 
 #include "libgraphene/common/Helpers.hpp"
 #include "libgraphene/common/Type.hpp"
-#include "libgraphene/dsl/codelet/CodeGen.hpp"
-#include "libgraphene/dsl/codelet/Function.hpp"
-#include "libgraphene/dsl/codelet/Value.hpp"
-#include "libgraphene/dsl/codelet/VertexTypes.hpp"
-namespace graphene::codelet::dsl {
+#include "libgraphene/dsl/code/CodeGen.hpp"
+#include "libgraphene/dsl/code/Function.hpp"
+#include "libgraphene/dsl/code/Value.hpp"
+#include "libgraphene/dsl/code/VertexTypes.hpp"
+namespace graphene::codedsl {
 /**
  * @brief Represents a vertex in the CodeDSL language.
  */
@@ -93,4 +93,4 @@ class Vertex {
  private:
   std::vector<MemberVariable> fields_;
 };
-}  // namespace graphene::codelet::dsl
+}  // namespace graphene::codedsl

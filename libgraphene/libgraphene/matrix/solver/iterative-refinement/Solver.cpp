@@ -5,8 +5,8 @@
 #include <poputil/VertexTemplates.hpp>
 
 #include "libgraphene/common/Concepts.hpp"
-#include "libgraphene/dsl/ControlFlow.hpp"
-#include "libgraphene/dsl/Operators.hpp"
+#include "libgraphene/dsl/tensor/ControlFlow.hpp"
+#include "libgraphene/dsl/tensor/Operators.hpp"
 #include "libgraphene/matrix/Matrix.hpp"
 #include "libgraphene/matrix/details/crs/CRSMatrix.hpp"
 #include "libgraphene/matrix/solver/SolverStats.hpp"

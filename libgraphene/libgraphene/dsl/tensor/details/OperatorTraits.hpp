@@ -3,7 +3,7 @@
 #include <popops/ExprOp.hpp>
 
 #include "libgraphene/common/Concepts.hpp"
-#include "libgraphene/dsl/Traits.hpp"
+#include "libgraphene/dsl/tensor/Traits.hpp"
 #include "libtwofloat/twofloat.hpp"
 
 namespace graphene::ops {

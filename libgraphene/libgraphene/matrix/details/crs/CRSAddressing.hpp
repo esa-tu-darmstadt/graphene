@@ -2,9 +2,9 @@
 
 #include <optional>
 
-#include "libgraphene/dsl/Tensor.hpp"
-#include "libgraphene/dsl/TensorVariant.hpp"
-#include "libgraphene/dsl/Traits.hpp"
+#include "libgraphene/dsl/tensor/Tensor.hpp"
+#include "libgraphene/dsl/tensor/TensorVariant.hpp"
+#include "libgraphene/dsl/tensor/Traits.hpp"
 #include "libgraphene/matrix/Addressing.hpp"
 #include "libgraphene/matrix/Coloring.hpp"
 

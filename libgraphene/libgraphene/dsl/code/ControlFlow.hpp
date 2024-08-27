@@ -3,10 +3,10 @@
 #include <poplar/Tensor.hpp>
 
 #include "libgraphene/common/Helpers.hpp"
-#include "libgraphene/dsl/codelet/CodeGen.hpp"
-#include "libgraphene/dsl/codelet/Value.hpp"
+#include "libgraphene/dsl/code/CodeGen.hpp"
+#include "libgraphene/dsl/code/Value.hpp"
 
-namespace graphene::codelet::dsl {
+namespace graphene::codedsl {
 
 /**
  * @brief Returns from a function with a given value.
@@ -49,4 +49,4 @@ void If(Value cond, std::function<void()> thenDo,
  */
 void While(Value cond, std::function<void()> body);
 
-}  // namespace graphene::codelet::dsl
+}  // namespace graphene::codedsl

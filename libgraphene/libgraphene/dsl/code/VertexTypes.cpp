@@ -2,7 +2,7 @@
 
 #include <unordered_map>
 
-namespace graphene::codelet::dsl {
+namespace graphene::codedsl {
 
 constexpr VertexVectorType::VertexVectorType(TypeRef elementType)
     : Type(8), elementType_(elementType) {}
@@ -74,4 +74,4 @@ std::string VertexInOutType::str() const {
   return fmt::format("::poplar::{}<{}>", className, elementType_->str());
 }
 
-}  // namespace graphene::codelet::dsl
+}  // namespace graphene::codedsl

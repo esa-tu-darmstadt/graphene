@@ -1,6 +1,6 @@
 #pragma once
 
-#include "libgraphene/dsl/Tensor.hpp"
+#include "libgraphene/dsl/tensor/Tensor.hpp"
 #include "libgraphene/matrix/MatrixFormat.hpp"
 #include "libgraphene/matrix/Norm.hpp"
 #include "libgraphene/matrix/host/HostMatrix.hpp"

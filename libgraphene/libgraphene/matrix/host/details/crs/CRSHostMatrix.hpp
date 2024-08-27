@@ -7,8 +7,8 @@
 #include <variant>
 
 #include "libgraphene/common/Concepts.hpp"
-#include "libgraphene/dsl/HostTensor.hpp"
-#include "libgraphene/dsl/HostTensorVariant.hpp"
+#include "libgraphene/dsl/tensor/HostTensor.hpp"
+#include "libgraphene/dsl/tensor/HostTensorVariant.hpp"
 #include "libgraphene/matrix/host/TileLayout.hpp"
 #include "libgraphene/matrix/host/details/CoordinateFormat.hpp"
 #include "libgraphene/matrix/host/details/HostMatrixBase.hpp"

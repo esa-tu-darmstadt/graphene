@@ -4,7 +4,7 @@
 #include <variant>
 
 #include "libgraphene/common/Concepts.hpp"
-#include "libgraphene/dsl/HostTensor.hpp"
+#include "libgraphene/dsl/tensor/HostTensor.hpp"
 
 namespace graphene {
 template <DataType... Types>

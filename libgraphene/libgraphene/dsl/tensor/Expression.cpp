@@ -1,4 +1,4 @@
-#include "libgraphene/dsl/Expression.hpp"
+#include "libgraphene/dsl/tensor/Expression.hpp"
 
 #include <spdlog/spdlog.h>
 
@@ -7,7 +7,7 @@
 #include <popops/Expr.hpp>
 #include <pvti/pvti.hpp>
 
-#include "libgraphene/dsl/Tensor.hpp"
+#include "libgraphene/dsl/tensor/Tensor.hpp"
 #include "libgraphene/util/Context.hpp"
 #include "libgraphene/util/DebugInfo.hpp"
 #include "libgraphene/util/Tracepoint.hpp"

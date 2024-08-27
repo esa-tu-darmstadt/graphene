@@ -1,4 +1,4 @@
-#include "libgraphene/dsl/Tensor.hpp"
+#include "libgraphene/dsl/tensor/Tensor.hpp"
 
 #include <poplar/ArrayRef.hpp>
 #include <poplar/Graph.hpp>
@@ -12,9 +12,9 @@
 
 #include "libgraphene/common/Concepts.hpp"
 #include "libgraphene/common/Traits.hpp"
-#include "libgraphene/dsl/Expression.hpp"
-#include "libgraphene/dsl/Operators.hpp"
-#include "libgraphene/dsl/RemoteTensor.hpp"
+#include "libgraphene/dsl/tensor/Expression.hpp"
+#include "libgraphene/dsl/tensor/Operators.hpp"
+#include "libgraphene/dsl/tensor/RemoteTensor.hpp"
 #include "libgraphene/matrix/Norm.hpp"
 #include "libgraphene/util/Context.hpp"
 #include "libgraphene/util/DebugInfo.hpp"

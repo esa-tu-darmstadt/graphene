@@ -7,8 +7,8 @@
 #include <poplar/PrintTensor.hpp>
 
 #include "CLI/CLI.hpp"
-#include "libgraphene/dsl/RemoteTensor.hpp"
-#include "libgraphene/dsl/Tensor.hpp"
+#include "libgraphene/dsl/tensor/RemoteTensor.hpp"
+#include "libgraphene/dsl/tensor/Tensor.hpp"
 #include "libgraphene/matrix/Matrix.hpp"
 #include "libgraphene/matrix/Norm.hpp"
 #include "libgraphene/matrix/host/HostMatrix.hpp"

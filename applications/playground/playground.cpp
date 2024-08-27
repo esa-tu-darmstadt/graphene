@@ -3,10 +3,10 @@
 #include <cstddef>
 #include <memory>
 
-#include "libgraphene/dsl/ControlFlow.hpp"
-#include "libgraphene/dsl/Operators.hpp"
-#include "libgraphene/dsl/RemoteTensor.hpp"
-#include "libgraphene/dsl/Tensor.hpp"
+#include "libgraphene/dsl/tensor/ControlFlow.hpp"
+#include "libgraphene/dsl/tensor/Operators.hpp"
+#include "libgraphene/dsl/tensor/RemoteTensor.hpp"
+#include "libgraphene/dsl/tensor/Tensor.hpp"
 #include "libgraphene/matrix/Matrix.hpp"
 #include "libgraphene/matrix/Norm.hpp"
 #include "libgraphene/matrix/host/HostMatrix.hpp"

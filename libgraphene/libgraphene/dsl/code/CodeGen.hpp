@@ -7,7 +7,7 @@
 #include <stack>
 
 #include "libgraphene/common/Type.hpp"
-namespace graphene::codelet::dsl {
+namespace graphene::codedsl {
 
 struct Auto {};
 
@@ -82,4 +82,4 @@ class CodeGen {
     return "vertex" + std::to_string(counter++);
   }
 };
-}  // namespace graphene::codelet::dsl
+}  // namespace graphene::codedsl

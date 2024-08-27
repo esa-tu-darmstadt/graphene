@@ -2,9 +2,9 @@
 
 #include <spdlog/spdlog.h>
 
-#include "libgraphene/dsl/codelet/Value.hpp"
+#include "libgraphene/dsl/code/Value.hpp"
 
-namespace graphene::codelet::dsl {
+namespace graphene::codedsl {
 
 namespace detail {
 enum class TernaryOpType { CLAMP, SELECT };
@@ -247,4 +247,4 @@ GRAPHENE_DEFINE_EXPR_BINARY_OP_AND_SYMBOL(Sub, SUBTRACT, -)
 
 #undef GRAPHENE_DEFINE_EXPR_BINARY_OP
 #undef GRAPHENE_DEFINE_EXPR_BINARY_OP_AND_SYMBOL
-}  // namespace graphene::codelet::dsl
+}  // namespace graphene::codedsl

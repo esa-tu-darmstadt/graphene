@@ -2,7 +2,7 @@
 
 #include <spdlog/spdlog.h>
 
-#include "libgraphene/dsl/Operators.hpp"
+#include "libgraphene/dsl/tensor/Operators.hpp"
 #include "libgraphene/matrix/Norm.hpp"
 #include "libgraphene/util/Context.hpp"
 #include "libgraphene/util/DebugInfo.hpp"

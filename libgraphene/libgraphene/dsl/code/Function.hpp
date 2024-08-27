@@ -3,9 +3,9 @@
 #include <spdlog/spdlog.h>
 
 #include "libgraphene/common/Helpers.hpp"
-#include "libgraphene/dsl/codelet/CodeGen.hpp"
-#include "libgraphene/dsl/codelet/Value.hpp"
-namespace graphene::codelet::dsl {
+#include "libgraphene/dsl/code/CodeGen.hpp"
+#include "libgraphene/dsl/code/Value.hpp"
+namespace graphene::codedsl {
 /**
  * @brief Represents a function in the CodeDSL language.
  */
@@ -109,4 +109,4 @@ class Function : public Value {
   TypeRef resType_;
   std::vector<Parameter> args_;
 };
-}  // namespace graphene::codelet::dsl
+}  // namespace graphene::codedsl

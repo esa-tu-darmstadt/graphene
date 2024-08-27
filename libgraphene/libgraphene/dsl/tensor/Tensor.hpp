@@ -8,7 +8,7 @@
 #include <typeindex>
 
 #include "libgraphene/common/Concepts.hpp"
-#include "libgraphene/dsl/Expression.hpp"
+#include "libgraphene/dsl/tensor/Expression.hpp"
 #include "libgraphene/matrix/Norm.hpp"
 
 namespace graphene {

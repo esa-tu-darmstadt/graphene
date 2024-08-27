@@ -11,12 +11,12 @@
 #include <poplar/Graph.hpp>
 #include <stdexcept>
 
-#include "libgraphene/dsl/HostTensor.hpp"
-#include "libgraphene/dsl/HostTensorVariant.hpp"
-#include "libgraphene/dsl/RemoteTensor.hpp"
-#include "libgraphene/dsl/RemoteTensorVariant.hpp"
-#include "libgraphene/dsl/Tensor.hpp"
-#include "libgraphene/dsl/TensorVariant.hpp"
+#include "libgraphene/dsl/tensor/HostTensor.hpp"
+#include "libgraphene/dsl/tensor/HostTensorVariant.hpp"
+#include "libgraphene/dsl/tensor/RemoteTensor.hpp"
+#include "libgraphene/dsl/tensor/RemoteTensorVariant.hpp"
+#include "libgraphene/dsl/tensor/Tensor.hpp"
+#include "libgraphene/dsl/tensor/TensorVariant.hpp"
 #include "libgraphene/matrix/Matrix.hpp"
 #include "libgraphene/matrix/details/crs/CRSAddressing.hpp"
 #include "libgraphene/matrix/host/HostMatrix.hpp"

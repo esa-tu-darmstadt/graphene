@@ -7,7 +7,7 @@
 #include "CodeGen.hpp"
 #include "Value.hpp"
 
-namespace graphene::codelet::dsl {
+namespace graphene::codedsl {
 
 void Return(Value value) {
   CodeGen::emitCode("return ");
@@ -45,4 +45,4 @@ void While(Value cond, std::function<void()> body) {
   CodeGen::emitCode("}\n");
 }
 
-}  // namespace graphene::codelet::dsl
+}  // namespace graphene::codedsl

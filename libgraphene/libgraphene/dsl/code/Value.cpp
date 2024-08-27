@@ -7,7 +7,7 @@
 
 #include "CodeGen.hpp"
 
-namespace graphene::codelet::dsl {
+namespace graphene::codedsl {
 
 Value Value::getVoid() { return Value(Type::VOID, ""); }
 
@@ -85,4 +85,4 @@ Void::Void() : Value(Type::VOID, "") {}
 
 Expression::Expression(TypeRef type, std::string expr) : Value(type, expr) {}
 
-}  // namespace graphene::codelet::dsl
+}  // namespace graphene::codedsl

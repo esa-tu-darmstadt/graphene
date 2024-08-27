@@ -3,7 +3,7 @@
 #include <poplar/DebugContext.hpp>
 
 #include "libgraphene/common/Concepts.hpp"
-#include "libgraphene/dsl/Tensor.hpp"
+#include "libgraphene/dsl/tensor/Tensor.hpp"
 #include "libgraphene/matrix/solver/Configuration.hpp"
 #include "libgraphene/matrix/solver/SolverStats.hpp"
 namespace graphene::matrix {
