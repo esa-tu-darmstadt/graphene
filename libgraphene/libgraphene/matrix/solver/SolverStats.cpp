@@ -60,13 +60,10 @@ void SolverStats::print() const {
                                      /* singular */ {poplar::BOOL, 1}},
                                     {});
 
-  // Capture the values we want to print because this SolverPerformance object
-  // will be destroyed when the host function is called
-  std::string solverNameCopy = solverName;
-  VectorNorm normCopy = norm;
-  size_t tilesCopy = numTiles;
-
-  runtime.registerHostFunction(handle, [solverNameCopy, normCopy, tilesCopy](
+  // Capture the values we want to print by value  because this
+  // SolverPerformance object will be destroyed when the host function is called
+  runtime.registerHostFunction(handle, [solverName = solverName, norm = norm,
+                                        tiles = numTiles](
                                            poplar::ArrayRef<const void *> ins,
                                            poplar::ArrayRef<void *> /*outs*/) {
     float initialResidual = *(float *)ins[0];
@@ -77,14 +74,14 @@ void SolverStats::print() const {
     bool singular = *(bool *)ins[5];
 
     std::string executionTime = Runtime::instance().getCurrentExecutionTime();
-    std::string normString = normToString(normCopy);
+    std::string normString = normToString(norm);
 
     // Print message for unscaled norms
     spdlog::info(
         "{}: Solved on {} IPU tiles, {} norm, Initial residual = {}, "
         "Final residual = {}, Iterations = {}, Converged = {}, Singular = "
         "{}, Current Execution Time = {}",
-        solverNameCopy, tilesCopy, normString, initialResidual, finalResidual,
+        solverName, tiles, normString, initialResidual, finalResidual,
         iterations, converged, singular, executionTime);
   });
   program.add(poplar::program::Call(
