@@ -6,6 +6,7 @@
 
 #include "libgraphene/common/Concepts.hpp"
 #include "libgraphene/common/Traits.hpp"
+#include "libgraphene/common/Type.hpp"
 
 namespace graphene {
 
@@ -82,6 +83,11 @@ class Expression {
    * @brief Get the number of elements in the expression.
    */
   size_t numElements() const;
+
+  /**
+   * @brief Get the data type of the expression.
+   */
+  TypeRef type() const;
 
   /**
    * @brief Cast the expression to a different data type.

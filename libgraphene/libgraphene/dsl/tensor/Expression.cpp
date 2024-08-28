@@ -7,6 +7,7 @@
 #include <popops/Expr.hpp>
 #include <pvti/pvti.hpp>
 
+#include "libgraphene/common/Type.hpp"
 #include "libgraphene/dsl/tensor/Tensor.hpp"
 #include "libgraphene/util/Context.hpp"
 #include "libgraphene/util/DebugInfo.hpp"
@@ -139,6 +140,11 @@ size_t Expression<T>::numElements() const {
     num *= dim;
   }
   return num;
+}
+
+template <DataType T>
+TypeRef Expression<T>::type() const {
+  return getType<T>();
 }
 
 // Explicit instantiation
