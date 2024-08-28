@@ -49,4 +49,7 @@ void If(Value cond, std::function<void()> thenDo,
  */
 void While(Value cond, std::function<void()> body);
 
+void For(Value start, Value end, Value step, std::function<void(Value)> body,
+         bool reverse = false, TypeRef iteratorType = Type::INT32);
+
 }  // namespace graphene::codedsl
