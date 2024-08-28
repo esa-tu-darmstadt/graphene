@@ -5,6 +5,7 @@
 #include <poplar/GraphElements.hpp>
 
 #include "CodeGen.hpp"
+#include "Operators.hpp"
 #include "Value.hpp"
 
 namespace graphene::codedsl {
@@ -24,13 +25,13 @@ void If(Value cond, std::function<void()> thenDo,
   }
   CodeGen::emitCode("if (");
   cond.emitValue();
-  CodeGen::emitCode(") {");
+  CodeGen::emitCode(") {\n");
   thenDo();
-  CodeGen::emitCode("}");
+  CodeGen::emitCode("}\n");
   if (elseDo) {
-    CodeGen::emitCode(" else {");
+    CodeGen::emitCode(" else {\n");
     elseDo();
-    CodeGen::emitCode("}");
+    CodeGen::emitCode("}\n");
   }
 }
 
@@ -42,6 +43,17 @@ void While(Value cond, std::function<void()> body) {
   cond.emitValue();
   CodeGen::emitCode(") {\n");
   body();
+  CodeGen::emitCode("}\n");
+}
+
+void For(Value start, Value end, Value step, std::function<void(Value)> body,
+         bool reverse = false, TypeRef iteratorType = Type::INT32) {
+  CodeGen::emitCode("for (");
+  Variable i(iteratorType, start);
+  CodeGen::emitStatement((i < end).expr());
+  i.assign(i + step, false);
+  CodeGen::emitCode(") {\n");
+  body(i);
   CodeGen::emitCode("}\n");
 }
 
