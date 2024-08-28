@@ -27,8 +27,8 @@ template <typename F>
 void ExecuteAsMapped(std::vector<poplar::Tensor> tensors,
                      std::vector<TypeRef> tensorTypes,
                      std::vector<VertexInOutType::Direction> directions, F code)
-  requires(
-      std::is_same_v<typename detail::function_traits<F>::return_type, void>)
+  requires(std::is_same_v<
+           typename graphene::detail::function_traits<F>::return_type, void>)
 {
   if (tensorTypes.size() != tensors.size() ||
       directions.size() != tensors.size()) {
@@ -37,13 +37,14 @@ void ExecuteAsMapped(std::vector<poplar::Tensor> tensors,
         "match");
   }
 
-  constexpr size_t numTensors = detail::function_traits<F>::arity;
+  constexpr size_t numTensors = graphene::detail::function_traits<F>::arity;
   if (numTensors != tensors.size())
     throw std::runtime_error(
         "The user code must take one argument for each "
         "tensor");
 
-  using TupleArgsType = typename detail::function_traits<F>::args_type;
+  using TupleArgsType =
+      typename graphene::detail::function_traits<F>::args_type;
   using FunctionGeneratorType =
       typename graphene::detail::apply_tuple_args<Function::FunctionGenerator,
                                                   TupleArgsType>::type;
@@ -107,6 +108,7 @@ void ExecuteAsMapped(std::vector<poplar::Tensor> tensors,
           tensors[i].dim(0) == 1
               ? tensors[i]
               : sliceTensorToTile(tensors[i], tile, &tensorMappings[i]);
+      spdlog::trace(std::string(localTensor.shapeToString()));
       graph.connect(v[vertex.fields()[i].expr()], localTensor.flatten());
     }
   }

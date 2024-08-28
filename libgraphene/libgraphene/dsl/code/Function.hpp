@@ -35,7 +35,7 @@ class Function : public Value {
   Function(std::string name, TypeRef resType,
            std::initializer_list<TypeRef> argTypes, F code)
       : Value(VoidType::get(), name), resType_(resType) {
-    constexpr size_t numArgs = detail::function_traits<F>::arity;
+    constexpr size_t numArgs = graphene::detail::function_traits<F>::arity;
     if (numArgs != argTypes.size()) {
       throw std::runtime_error("Number of arguments does not match");
     }
@@ -66,7 +66,7 @@ class Function : public Value {
     CodeGen::emitCode(") {\n");
 
     // Call the user-provided code
-    detail::callFunctionWithUnpackedArgs<void>(code, args_);
+    ::graphene::detail::callFunctionWithUnpackedArgs<void>(code, args_);
 
     CodeGen::emitCode("}");
 
