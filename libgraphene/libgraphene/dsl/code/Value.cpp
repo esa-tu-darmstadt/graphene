@@ -30,7 +30,15 @@ Value Value::operator[](Value index) {
                isAssignable_);
 }
 
-Value& Value::operator=(const Value& other) {
+Value Value::size() const {
+  if (!type_->hasFunction("size")) {
+    throw std::runtime_error(
+        fmt::format("Type {} has no size function", type_->str()));
+  }
+  return Value(type_->functionReturnType("size"), expr() + ".size()");
+}
+
+void Value::assign(const Value& other, bool endWithSemicolon) {
   if (!isAssignable_) {
     throw std::runtime_error("Value is not assignable");
   }
@@ -39,8 +47,10 @@ Value& Value::operator=(const Value& other) {
     spdlog::debug("Implicit cast from {} to {} during assignment",
                   other.type()->str(), type()->str());
   }
-  CodeGen::emitStatement(this->expr() + " = " + other.expr());
-  return *this;
+  CodeGen::emitCode(this->expr() + " = " + other.expr());
+  if (endWithSemicolon) {
+    CodeGen::emitEndStatement();
+  }
 }
 
 Value::Value(TypeRef type, std::string expr, bool isAssignable)

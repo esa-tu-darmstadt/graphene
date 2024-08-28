@@ -1,6 +1,8 @@
 #pragma once
 
 #include <poplar/Type.hpp>
+#include <set>
+#include <unordered_map>
 
 #include "libtwofloat/twofloat.hpp"
 
@@ -28,6 +30,13 @@ class Type {
   virtual poplar::Type poplarType() const {
     throw std::runtime_error("Type is not associated with a poplar type.");
   }
+  // TODO: Add better support for function types
+  virtual bool hasFunction(std::string func) const { return false; }
+  virtual TypeRef functionReturnType(std::string func) const {
+    throw std::runtime_error("No functions in this type.");
+  }
+
+  /** The C++ string representation of the type. */
   virtual std::string str() const = 0;
 
   // Shortcuts for common types
@@ -200,6 +209,26 @@ class VoidType : public Type {
   }
   bool isVoid() const override { return true; }
   std::string str() const override { return "void"; }
+};
+
+class PtrType : public Type {
+ protected:
+  TypeRef elementType_;
+
+ public:
+  constexpr PtrType(TypeRef elementType) : Type(4), elementType_(elementType) {}
+  static PtrType *get(TypeRef elementType) {
+    static std::unordered_map<TypeRef, std::unique_ptr<PtrType>> instances;
+    auto it = instances.find(elementType);
+    if (it != instances.end()) {
+      return it->second.get();
+    }
+    auto instance = std::make_unique<PtrType>(elementType);
+    return (instances[elementType] = std::move(instance)).get();
+  }
+  TypeRef elementType() const override { return elementType_; }
+  bool isSubscriptable() const override { return true; }
+  std::string str() const override { return elementType_->str() + "*"; }
 };
 
 template <typename T>

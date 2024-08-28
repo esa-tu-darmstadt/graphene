@@ -27,6 +27,8 @@ class VertexVectorType : public Type {
   static const VertexVectorType* get(TypeRef elementType);
 
   std::string str() const override;
+  bool hasFunction(std::string func) const override;
+  TypeRef functionReturnType(std::string func) const override;
 
  private:
   TypeRef elementType_;
@@ -60,6 +62,8 @@ class VertexInOutType : public Type {
 
   bool isSubscriptable() const override;
   std::string str() const override;
+  bool hasFunction(std::string func) const override;
+  TypeRef functionReturnType(std::string func) const override;
 
  private:
   TypeRef elementType_;

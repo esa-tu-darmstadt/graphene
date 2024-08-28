@@ -30,8 +30,9 @@ class Vertex {
          std::vector<VertexInOutType::Direction> directions,
          F computeFunctionGenerator) {
     static_assert(
-        std::is_same_v<typename detail::function_traits<F>::return_type,
-                       Function>,
+        std::is_same_v<
+            typename graphene::detail::function_traits<F>::return_type,
+            Function>,
         "Compute function generator must return a Function object");
 
     // Create the fields
@@ -42,8 +43,9 @@ class Vertex {
     }
 
     // Generate the compute function
-    Function userFunc = detail::callFunctionWithUnpackedArgs<Function>(
-        computeFunctionGenerator, fields_);
+    Function userFunc =
+        graphene::detail::callFunctionWithUnpackedArgs<Function>(
+            computeFunctionGenerator, fields_);
 
     // Check if the compute function is valid
     if (userFunc.returnType() != BoolType::get()) {

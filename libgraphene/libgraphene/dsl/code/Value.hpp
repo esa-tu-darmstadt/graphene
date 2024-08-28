@@ -46,19 +46,23 @@ class Value {
    */
   Value cast(TypeRef type);
 
-  /**
-   * @brief Subscript operator for accessing elements of subscriptable types.
-   * @param index The index Value.
-   * @return A new Value representing the subscripted element.
-   */
+  /// ------------------ Functions ------------------
+  /// These are the functions that may be implemented by a type.
+  /// If a function is not implemented by the type, calling it will throw an
+  /// exception.
   Value operator[](Value index);
+  Value size() const;
 
   /**
    * @brief Assignment operator for assignable values.
    * @param other The Value to assign.
    * @return A reference to this Value.
    */
-  Value& operator=(const Value& other);
+  void assign(const Value& other, bool endWithSemicolon = true);
+  Value& operator=(const Value& other) {
+    assign(other);
+    return *this;
+  }
 
  protected:
   explicit Value(TypeRef type, std::string expr, bool isAssignable = false);
@@ -74,6 +78,9 @@ class Value {
  */
 class Variable : public Value {
  public:
+  using Value::operator=;
+  using Value::Value;
+
   /**
    * @brief Constructs a Variable with a given type.
    * @param type The type of the variable.

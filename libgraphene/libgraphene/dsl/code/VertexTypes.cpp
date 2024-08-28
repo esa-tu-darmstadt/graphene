@@ -27,6 +27,17 @@ std::string VertexVectorType::str() const {
   return fmt::format("::poplar::Vector<{}>", elementType_->str());
 }
 
+bool VertexVectorType::hasFunction(std::string func) const {
+  return func == "size";
+}
+
+TypeRef VertexVectorType::functionReturnType(std::string func) const {
+  if (func == "size") {
+    return Type::INT32;
+  }
+  throw std::runtime_error("Function not found.");
+}
+
 constexpr VertexInOutType::VertexInOutType(Direction direction,
                                            TypeRef elementType)
     : Type(8), elementType_(elementType), direction_(direction) {}
@@ -56,6 +67,20 @@ VertexInOutType* VertexInOutType::get(Direction direction,
 
 bool VertexInOutType::isSubscriptable() const {
   return dynamic_cast<const VertexVectorType*>(elementType_) != nullptr;
+}
+
+bool VertexInOutType::hasFunction(std::string func) const {
+  if (auto vectorType = dynamic_cast<const VertexVectorType*>(elementType_)) {
+    return vectorType->hasFunction(func);
+  }
+  return false;
+}
+
+TypeRef VertexInOutType::functionReturnType(std::string func) const {
+  if (auto vectorType = dynamic_cast<const VertexVectorType*>(elementType_)) {
+    return vectorType->functionReturnType(func);
+  }
+  throw std::runtime_error("Function not found.");
 }
 
 std::string VertexInOutType::str() const {
