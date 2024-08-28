@@ -9,5 +9,5 @@ add_subdirectory(dsl)
 add_subdirectory(util)
 
 add_library(Graphene INTERFACE)
-target_link_libraries(Graphene INTERFACE GrapheneCommon GrapheneUtil GrapheneTensorDSL GrapheneMatrix popops nlohmann_json::nlohmann_json metis)
+target_link_libraries(Graphene INTERFACE GrapheneCommon GrapheneUtil GrapheneTensorDSL GrapheneCodeDSL GrapheneMatrix popops nlohmann_json::nlohmann_json metis)
 target_include_directories(Graphene INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/..)
