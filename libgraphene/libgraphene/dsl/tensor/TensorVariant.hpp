@@ -19,24 +19,24 @@ class HostValueVariant;
  * @tparam Types The types of values that can be stored in the variant.
  */
 template <DataType... Types>
-class ValueVariant {
+class TensorVariant {
   using InnerType = std::variant<Tensor<Types>...>;
-  using RemoteValueInnerType = std::variant<RemoteTensor<Types>...>;
-  using RemoteValueType = HostValueVariant<Types...>;
+  using RemoteTensorInnerType = std::variant<RemoteTensor<Types>...>;
+  using RemoteTensorType = HostValueVariant<Types...>;
   InnerType value_;
 
  public:
   /**
    * @brief Default constructor.
    */
-  ValueVariant() = default;
+  TensorVariant() = default;
 
   /**
    * @brief Constructs a ValueVariant with the given inner variant value.
    *
    * @param value The inner variant value.
    */
-  ValueVariant(InnerType value) : value_(std::move(value)) {}
+  TensorVariant(InnerType value) : value_(std::move(value)) {}
 
   /**
    * @brief Constructs a ValueVariant with the given Value.
@@ -46,7 +46,7 @@ class ValueVariant {
    */
   template <typename T>
     requires(std::is_same_v<T, Types> || ...)
-  ValueVariant(Tensor<T> value) : value_(std::move(value)) {}
+  TensorVariant(Tensor<T> value) : value_(std::move(value)) {}
 
   /**
    * @brief Assignment operator for Value.
@@ -57,7 +57,7 @@ class ValueVariant {
    */
   template <typename T>
     requires(std::is_same_v<T, Types> || ...)
-  ValueVariant &operator=(Tensor<T> value) {
+  TensorVariant &operator=(Tensor<T> value) {
     value_ = std::move(value);
     return *this;
   }
@@ -67,9 +67,9 @@ class ValueVariant {
    *
    * @return A RemoteValueType object representing the copied remote value.
    */
-  RemoteValueType copyToRemote() const {
-    return RemoteValueType(std::visit(
-        [](auto &&arg) -> RemoteValueInnerType { return arg.copyToRemote(); },
+  RemoteTensorType copyToRemote() const {
+    return RemoteTensorType(std::visit(
+        [](auto &&arg) -> RemoteTensorInnerType { return arg.copyToRemote(); },
         value_));
   }
 
@@ -92,6 +92,13 @@ class ValueVariant {
     return std::visit(
         [flattenIfScalar](auto &&arg) { return arg.tensor(flattenIfScalar); },
         value_);
+  }
+
+  /**
+   * @brief Gets the type of the value.
+   */
+  TypeRef type() const {
+    return std::visit([](auto &&arg) { return arg.type(); }, value_);
   }
 
   /**
@@ -125,11 +132,11 @@ class ValueVariant {
  * @brief A type alias for a ValueVariant that can hold any unsigned integer
  * type.
  */
-using AnyUIntValue = ValueVariant<uint8_t, uint16_t, uint32_t>;
+using AnyUIntValue = TensorVariant<uint8_t, uint16_t, uint32_t>;
 
 /**
  * @brief A type alias for a ValueVariant that can hold any signed integer type.
  */
-using AnyIntValue = ValueVariant<int8_t, int16_t, int32_t>;
+using AnyIntValue = TensorVariant<int8_t, int16_t, int32_t>;
 
 }  // namespace graphene

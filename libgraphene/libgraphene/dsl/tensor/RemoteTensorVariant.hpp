@@ -7,7 +7,7 @@
 #include "libgraphene/dsl/tensor/Tensor.hpp"
 namespace graphene {
 template <DataType... Types>
-class ValueVariant;
+class TensorVariant;
 
 template <DataType... Types>
 /**
@@ -21,7 +21,7 @@ template <DataType... Types>
 class RemoteValueVariant {
   using InnerType = std::variant<RemoteTensor<Types>...>;
   using ValueInnerType = std::variant<Tensor<Types>...>;
-  using ValueType = ValueVariant<Types...>;
+  using ValueType = TensorVariant<Types...>;
   InnerType value_;
 
  public:
