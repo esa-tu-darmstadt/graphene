@@ -176,27 +176,14 @@ TypeRef inferType(TernaryOpType op, TypeRef a, TypeRef b, TypeRef c);
 
 }  // namespace detail
 
-/**
- * @brief Packs a value into a Value object.
- *
- * This function is a no-op for Value objects and constructs a Value object
- * supported literal types.
- *
- */
-Value packInValue(Value value) { return value; }
-template <DataType T>
-Value packInValue(T value) {
-  return Value(value);
-}
-
-#define GRAPHENE_DEFINE_EXPR_BINARY_OP(name, opType, symbol)                 \
+#define BINARY_OP(name, opType, symbol)                                      \
   template <typename lhs_t, typename rhs_t>                                  \
-  auto name(lhs_t lhs, rhs_t rhs)                                            \
+  Value name(lhs_t lhs, rhs_t rhs)                                           \
     requires(std::derived_from<lhs_t, Value> ||                              \
              std::derived_from<rhs_t, Value>)                                \
   {                                                                          \
-    auto lhsValue = packInValue(lhs);                                        \
-    auto rhsValue = packInValue(rhs);                                        \
+    Value lhsValue = lhs;                                                    \
+    Value rhsValue = rhs;                                                    \
     auto resultType = detail::inferType(detail::BinaryOpType::opType,        \
                                         lhsValue.type(), rhsValue.type());   \
     spdlog::trace("Inferring type: {} {} {} -> {}", lhsValue.type()->str(),  \
@@ -210,41 +197,59 @@ Value packInValue(T value) {
                                       rhsValue.expr() + ")");                \
   }
 
-#define GRAPHENE_DEFINE_EXPR_BINARY_OP_AND_SYMBOL(name, opType, symbol) \
-  GRAPHENE_DEFINE_EXPR_BINARY_OP(name, opType, symbol)                  \
-  template <typename lhs_t, typename rhs_t>                             \
-  auto operator symbol(lhs_t lhs, rhs_t rhs)                            \
-    requires(std::derived_from<lhs_t, Value> ||                         \
-             std::derived_from<rhs_t, Value>)                           \
-  {                                                                     \
-    return name(lhs, rhs);                                              \
+#define BINARY_OP_AND_SYMBOL(name, opType, symbol) \
+  BINARY_OP(name, opType, symbol)                  \
+  template <typename lhs_t, typename rhs_t>        \
+  Value operator symbol(lhs_t lhs, rhs_t rhs)      \
+    requires(std::derived_from<lhs_t, Value> ||    \
+             std::derived_from<rhs_t, Value>)      \
+  {                                                \
+    return name(lhs, rhs);                         \
   }
 
-GRAPHENE_DEFINE_EXPR_BINARY_OP_AND_SYMBOL(Add, ADD, +)
+#define BINARY_OP_INPLACE(name, opType, symbol)     \
+  template <typename rhs_t>                         \
+  void name##Inplace(Value &lhs, rhs_t rhs) {       \
+    Value rhsValue = rhs;                           \
+    lhs = name(lhs, rhsValue);                      \
+  }                                                 \
+  template <typename rhs_t>                         \
+  Value operator symbol##=(Value &lhs, rhs_t rhs) { \
+    name##Inplace(lhs, rhs);                        \
+    return lhs;                                     \
+  }
+
+#define BINARY_OP_AND_SYMBOL_AND_INPLACE(name, opType, symbol) \
+  BINARY_OP_AND_SYMBOL(name, opType, symbol)                   \
+  BINARY_OP_INPLACE(name, opType, symbol)
+
+BINARY_OP_AND_SYMBOL_AND_INPLACE(Add, ADD, +)
 // GRAPHENE_DEFINE_EXPR_BINARY_OP(Atan2, ATAN2)
-GRAPHENE_DEFINE_EXPR_BINARY_OP_AND_SYMBOL(BitwiseAnd, BITWISE_AND, &)
-GRAPHENE_DEFINE_EXPR_BINARY_OP_AND_SYMBOL(BitwiseOr, BITWISE_OR, |)
-GRAPHENE_DEFINE_EXPR_BINARY_OP_AND_SYMBOL(BitwiseXor, BITWISE_XOR, ^)
+BINARY_OP_AND_SYMBOL_AND_INPLACE(BitwiseAnd, BITWISE_AND, &)
+BINARY_OP_AND_SYMBOL_AND_INPLACE(BitwiseOr, BITWISE_OR, |)
+BINARY_OP_AND_SYMBOL_AND_INPLACE(BitwiseXor, BITWISE_XOR, ^)
 // GRAPHENE_DEFINE_EXPR_BINARY_OP(BitwiseXnor, BITWISE_XNOR)
-GRAPHENE_DEFINE_EXPR_BINARY_OP_AND_SYMBOL(Divide, DIVIDE, /)
-GRAPHENE_DEFINE_EXPR_BINARY_OP_AND_SYMBOL(Equal, EQUAL, ==)
-GRAPHENE_DEFINE_EXPR_BINARY_OP_AND_SYMBOL(Gte, GREATER_THAN_EQUAL, >=)
-GRAPHENE_DEFINE_EXPR_BINARY_OP_AND_SYMBOL(Gt, GREATER_THAN, >)
-GRAPHENE_DEFINE_EXPR_BINARY_OP_AND_SYMBOL(Lte, LESS_THAN_EQUAL, <=)
-GRAPHENE_DEFINE_EXPR_BINARY_OP_AND_SYMBOL(And, LOGICAL_AND, &&)
-GRAPHENE_DEFINE_EXPR_BINARY_OP_AND_SYMBOL(Or, LOGICAL_OR, ||)
-GRAPHENE_DEFINE_EXPR_BINARY_OP_AND_SYMBOL(Lt, LESS_THAN, <)
+BINARY_OP_AND_SYMBOL_AND_INPLACE(Divide, DIVIDE, /)
+BINARY_OP_AND_SYMBOL(Equal, EQUAL, ==)
+BINARY_OP_AND_SYMBOL(Gte, GREATER_THAN_EQUAL, >=)
+BINARY_OP_AND_SYMBOL_AND_INPLACE(Gt, GREATER_THAN, >)
+BINARY_OP_AND_SYMBOL(Lte, LESS_THAN_EQUAL, <=)
+BINARY_OP_AND_SYMBOL(And, LOGICAL_AND, &&)
+BINARY_OP_AND_SYMBOL(Or, LOGICAL_OR, ||)
+BINARY_OP_AND_SYMBOL_AND_INPLACE(Lt, LESS_THAN, <)
 // GRAPHENE_DEFINE_EXPR_BINARY_OP(InvStdDevToVariance,
 // INV_STD_DEV_TO_VARIANCE) GRAPHENE_DEFINE_EXPR_BINARY_OP(Max, MAXIMUM)
 // GRAPHENE_DEFINE_EXPR_BINARY_OP(Min, MINIMUM)
-GRAPHENE_DEFINE_EXPR_BINARY_OP_AND_SYMBOL(Mul, MULTIPLY, *)
-GRAPHENE_DEFINE_EXPR_BINARY_OP_AND_SYMBOL(NotEqual, NOT_EQUAL, !=)
+BINARY_OP_AND_SYMBOL_AND_INPLACE(Mul, MULTIPLY, *)
+BINARY_OP_AND_SYMBOL(NotEqual, NOT_EQUAL, !=)
 // GRAPHENE_DEFINE_EXPR_BINARY_OP(Pow, POWER)
-GRAPHENE_DEFINE_EXPR_BINARY_OP_AND_SYMBOL(Rem, REMAINDER, %)
-GRAPHENE_DEFINE_EXPR_BINARY_OP_AND_SYMBOL(Shl, SHIFT_LEFT, <<)
-GRAPHENE_DEFINE_EXPR_BINARY_OP_AND_SYMBOL(Shr, SHIFT_RIGHT, >>)
-GRAPHENE_DEFINE_EXPR_BINARY_OP_AND_SYMBOL(Sub, SUBTRACT, -)
+BINARY_OP_AND_SYMBOL_AND_INPLACE(Rem, REMAINDER, %)
+BINARY_OP_AND_SYMBOL(Shl, SHIFT_LEFT, <<)
+BINARY_OP_AND_SYMBOL(Shr, SHIFT_RIGHT, >>)
+BINARY_OP_AND_SYMBOL_AND_INPLACE(Sub, SUBTRACT, -)
 
 #undef GRAPHENE_DEFINE_EXPR_BINARY_OP
-#undef GRAPHENE_DEFINE_EXPR_BINARY_OP_AND_SYMBOL
+#undef BINARY_OP_AND_SYMBOL
+
+Value getTileID();
 }  // namespace graphene::codedsl

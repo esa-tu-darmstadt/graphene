@@ -2,8 +2,12 @@
 
 #include <spdlog/spdlog.h>
 
-namespace graphene::codedsl::detail {
-
+namespace graphene::codedsl {
+Value getTileID() {
+  return Expression(PtrType::get(Type::VOID), "__builtin_ipu_get_tile_id()")
+      .cast(Type::INT32);
+}
+namespace detail {
 TypeRef largerType(TypeRef a, TypeRef b) {
   if (a->size() > b->size()) return a;
   if (b->size() > a->size()) return b;
@@ -244,4 +248,5 @@ std::string_view to_string(TernaryOpType op) {
   throw std::runtime_error("Unsupported ternary operation type");
 }
 
-}  // namespace graphene::codedsl::detail
+}  // namespace detail
+}  // namespace graphene::codedsl
