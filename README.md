@@ -1,11 +1,9 @@
 # Graphene Linear Algebra Framework
 Graphene is a linear algebra framework for GraphCore IPUs. 
 
-The framework provides a domain-specific language (DSL) for expressing algebraic algorithms. The DSL consists of C++ classes that can be used to express algorithms in a high-level, mathematical way. 
+The framework provides a domain-specific language (DSL) for expressing algebraic algorithms. The DSL consists of C++ classes that can be used to express algebraic algorithms close to the mathematical notation.
 
-The users describes its algorithm in the DSL and compiles it to a host program using a standard C++ compiler. When the resulting program is run on the host, the algorithm is symbolically executed and translated into a Poplar dataflow graph. The graph is then compiled and executed on the IPU.
-
-Altough symbolically executed, the DSL is designed to be used as if it were directly executed. This presents a particular challenge when dealing with memory transfers between the host and the IPU. Data can only be transferred to the IPU after the full graph has been compiled and is loaded onto the IPU. Thus, when memory is copied from host to the IPU (i.e. `HostValue::copyToTile`), the data is stored in the `Runtime` and copied to the IPU after the graph is compiled and loaded.
+The users describes its algorithm in the DSL and compiles it to a host program using a standard C++ compiler. When the resulting program is run on the host, the algorithm is symbolically executed and translated into a Poplar dataflow graph. The graph is then compiled and can be executed on the IPU.
 
 ## Usage of the DSL
 The basic building block of the DSL is the `Value` class. It represents an assignable tensor:
@@ -26,10 +24,13 @@ poplar::Engine engine = runtime.compileGraph();
 runtime.loadAndRunEngine(engine);
 ```
 
+## Host Memory
+Altough symbolically executed, the DSL is designed to be used as if it were directly executed. This presents a particular challenge when dealing with memory transfers between the host and the IPU. Data can only be transferred to the IPU after the full graph has been compiled and is loaded onto the IPU. Thus, when memory is copied from host to the IPU (i.e. `HostValue::copyToTile`), the data is stored in the `Runtime` and copied to the IPU after the graph is compiled and loaded.
+
 ## Matrices
 Matrices in tile memory or host memory are represented by the `Matrix` or `HostMatrix` classes respectively. A `HostMatrix` can be constructed from a COO matrix triplet, or by loading a matrix from a matrix market file. The `HostMatrix` can be copied to the tile memory using the `copyToTile` method.
  
-Internally, only a custom CRS format is currently supported. The custom CRS format uses a dense vector for the diagonal values.
+At this point only a custom CRS format is currently supported. The custom CRS format uses a dense vector for the diagonal values.
 
 ## Solvers
 Graphene provides a number of solvers for linear systems of equations:
