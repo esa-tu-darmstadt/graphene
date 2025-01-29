@@ -12,16 +12,17 @@
 
 using namespace graphene;
 
-void graphene::cf::If(Expression<bool> condition,
-                      std::function<void()> trueBody,
+void graphene::cf::If(Expression condition, std::function<void()> trueBody,
                       std::function<void()> falseBody) {
   if (condition.numElements() != 1)
     throw std::runtime_error("Condition must be a scalar");
+  if (condition.type() != Type::BOOL)
+    throw std::runtime_error("Condition must be a boolean expression");
 
   auto &program = Context::program();
   DebugInfo di("cf");
 
-  Tensor<bool> predicate = condition;
+  Tensor predicate = condition;
 
   poplar::program::Sequence trueSeq, falseSeq, conditionSeq;
   {
@@ -38,15 +39,16 @@ void graphene::cf::If(Expression<bool> condition,
       poplar::program::If(predicate.tensor(true), trueSeq, falseSeq, di));
 }
 
-void graphene::cf::While(Expression<bool> condition,
-                         std::function<void()> body) {
+void graphene::cf::While(Expression condition, std::function<void()> body) {
   if (condition.numElements() != 1)
     throw std::runtime_error("Condition must be a scalar");
+  if (condition.type() != Type::BOOL)
+    throw std::runtime_error("Condition must be a boolean expression");
 
   auto &program = Context::program();
   DebugInfo di("cf");
 
-  Tensor<bool> predicate;
+  Tensor predicate = Tensor::uninitialized(Type::BOOL);
 
   poplar::program::Sequence conditionProg;
   {
@@ -77,7 +79,7 @@ void graphene::cf::Repeat(int count, std::function<void()> body) {
   program.add(poplar::program::Repeat(count, seq, di));
 }
 
-Tensor<unsigned> graphene::cf::Time(std::function<void()> body, size_t tile) {
+Tensor graphene::cf::Time(std::function<void()> body, size_t tile) {
   DebugInfo di("cf");
   poplar::program::Sequence seq;
   {
@@ -92,14 +94,13 @@ Tensor<unsigned> graphene::cf::Time(std::function<void()> body, size_t tile) {
 
   Context::program().add(seq);
 
-  return Tensor<unsigned>(tensor.slice(0, 1));
+  return Tensor::fromPoplar(tensor.slice(0, 1), Type::UINT32);
 }
 
-template <DataType RetType>
-std::tuple<Tensor<RetType>, Tensor<unsigned>> graphene::cf::Time(
-    std::function<Tensor<RetType>()> body, size_t tile) {
+std::tuple<Tensor, Tensor> graphene::cf::Time(std::function<Tensor()> body,
+                                              size_t tile) {
   DebugInfo di("cf");
-  std::optional<Tensor<RetType>> result;
+  std::optional<Tensor> result;
   poplar::program::Sequence seq;
   {
     Context context(seq);
@@ -113,12 +114,5 @@ std::tuple<Tensor<RetType>, Tensor<unsigned>> graphene::cf::Time(
 
   Context::program().add(seq);
 
-  return {*result, Tensor<unsigned>(tensor.slice(0, 1))};
+  return {*result, Tensor::fromPoplar(tensor.slice(0, 1), Type::UINT32)};
 }
-
-// Explicit instantiations
-#define INSTANTIATE_TIME_AND_RETURN(TYPE)             \
-  template std::tuple<Tensor<TYPE>, Tensor<unsigned>> \
-      graphene::cf::Time<TYPE>(std::function<Tensor<TYPE>()>, size_t);
-
-INSTANTIATE_TIME_AND_RETURN(float)

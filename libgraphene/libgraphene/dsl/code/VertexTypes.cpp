@@ -24,7 +24,9 @@ const VertexVectorType* VertexVectorType::get(TypeRef elementType) {
 }
 
 std::string VertexVectorType::str() const {
-  return fmt::format("::poplar::Vector<{}>", elementType_->str());
+  // FIXME: Make configurable
+  return fmt::format("::poplar::Vector<{}, poplar::VectorLayout::SPAN, 8>",
+                     elementType_->str());
 }
 
 bool VertexVectorType::hasFunction(std::string func) const {
@@ -97,6 +99,13 @@ std::string VertexInOutType::str() const {
       break;
   }
   return fmt::format("::poplar::{}<{}>", className, elementType_->str());
+}
+
+TypeRef VertexInOutType::nativePoplarType() const {
+  if (auto vectorType = dynamic_cast<const VertexVectorType*>(elementType_)) {
+    return vectorType->elementType();
+  }
+  return elementType_;
 }
 
 }  // namespace graphene::codedsl

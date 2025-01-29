@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstdint>
 #include <optional>
 #include <poplar/DebugContext.hpp>
 #include <string>
@@ -13,18 +14,19 @@ struct SolverStats {
 
   size_t numTiles;
 
-  Tensor<float> initialResidual =
-      Tensor<float>(std::numeric_limits<float>::infinity());
-  Tensor<float> finalResidual =
-      Tensor<float>(std::numeric_limits<float>::infinity());
+  Tensor initialResidual =
+      Tensor::withInitialValue(std::numeric_limits<float>::infinity());
 
-  Tensor<int> iterations = Tensor<int>(0);
+  Tensor finalResidual =
+      Tensor::withInitialValue(std::numeric_limits<float>::infinity());
 
-  Tensor<bool> converged = Tensor<bool>(false);
-  Tensor<bool> singular = Tensor<bool>(false);
+  Tensor iterations = Tensor::withInitialValue((uint32_t)0);
 
-  Tensor<float> normFactor = Tensor<float>(0);
-  std::optional<Tensor<float>> bNorm;
+  Tensor converged = Tensor::withInitialValue(false);
+  Tensor singular = Tensor::withInitialValue(false);
+
+  Tensor normFactor = Tensor::withInitialValue(0.0f);
+  std::optional<Tensor> bNorm;
 
   SolverStats(std::string solverName, VectorNorm norm, size_t numTiles)
       : solverName(std::move(solverName)), norm(norm), numTiles(numTiles) {}
@@ -41,8 +43,7 @@ struct SolverStats {
   void checkConvergence(float absTolerance, float relTolerance,
                         float relResidual);
 
-  void checkSingularity(Tensor<float> wApA,
-                        float tolerance = Traits<float>::vsmall());
+  void checkSingularity(Tensor wApA, float tolerance = Traits<float>::vsmall());
 
   bool requiresBNorm(float relTolerance) const { return relTolerance > 0; }
 

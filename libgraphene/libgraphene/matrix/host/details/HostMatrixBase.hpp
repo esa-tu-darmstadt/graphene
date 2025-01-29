@@ -5,15 +5,12 @@
 #include "libgraphene/matrix/host/TileLayout.hpp"
 #include "libgraphene/matrix/host/details/MatrixMarket.hpp"
 namespace graphene::matrix {
-template <DataType Type>
 class Matrix;
 
 namespace host {
 
-template <DataType Type>
-class HostMatrixBase
-    : public Runtime::HostResource,
-      public std::enable_shared_from_this<HostMatrixBase<Type>> {
+class HostMatrixBase : public Runtime::HostResource,
+                       public std::enable_shared_from_this<HostMatrixBase> {
  protected:
   size_t numTiles_;
   std::string name_;
@@ -26,8 +23,8 @@ class HostMatrixBase
  public:
   HostMatrixBase(size_t numTiles, std::string name)
       : numTiles_(numTiles), name_(name) {}
-  HostMatrixBase(const HostMatrixBase &other) = default;
-  HostMatrixBase(HostMatrixBase &&other) = default;
+  HostMatrixBase(const HostMatrixBase &other) = delete;
+  HostMatrixBase(HostMatrixBase &&other) = delete;
 
   virtual ~HostMatrixBase() = default;
 
@@ -35,22 +32,24 @@ class HostMatrixBase
     return tileLayout_[proci];
   }
 
-  std::tuple<poplar::Graph::TileToTensorMapping, std::vector<size_t>>
-  getVectorTileMappingAndShape(bool withHalo = false) const;
+  DistributedShape getVectorShape(bool withHalo = false,
+                                  size_t width = 0) const;
 
-  virtual matrix::Matrix<Type> copyToTile() = 0;
+  virtual matrix::Matrix copyToTile() = 0;
   virtual MatrixFormat getFormat() const = 0;
   virtual size_t numTiles() const { return numTiles_; }
 
   bool multicolorRecommended() const { return multicolorRecommended_; }
 
-  virtual HostTensor<Type> loadVectorFromFile(
-      std::string fileName, bool withHalo = false,
-      std::string name = "vector") const;
+  HostTensor loadVectorFromFile(TypeRef type, std::string fileName,
+                                bool withHalo = false,
+                                std::string name = "vector") const;
 
-  virtual HostTensor<Type> decomposeVector(const std::vector<Type> &vector,
-                                           bool includeHaloCells,
-                                           std::string name = "vector") const;
+  template <DataType Type>
+  HostTensor decomposeVector(const std::vector<Type> &vector,
+                             bool includeHaloCells,
+                             TypeRef destType = getType<Type>(),
+                             std::string name = "vector") const;
 };
 }  // namespace host
 }  // namespace graphene::matrix

@@ -48,6 +48,18 @@ class Context {
     return *programs_.back();
   }
 
+  static size_t getNumIPUs() {
+    assert(graphs_.size() > 0 &&
+           "No graph in context. Did you forget to create a context?");
+    return graphs_.back()->getTarget().getNumIPUs();
+  }
+
+  static size_t getNumTiles() {
+    assert(graphs_.size() > 0 &&
+           "No graph in context. Did you forget to create a context?");
+    return graphs_.back()->getTarget().getNumTiles();
+  }
+
   static void setPreludeProgram(poplar::program::Sequence &program) {
     preludeProgram_ = &program;
   }

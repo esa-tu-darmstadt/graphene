@@ -1,3 +1,5 @@
+#include "ControlFlow.hpp"
+
 #include <spdlog/spdlog.h>
 
 #include <cstdio>
@@ -8,18 +10,21 @@
 #include "Operators.hpp"
 #include "Value.hpp"
 
-namespace graphene::codedsl {
+using namespace graphene;
+using namespace graphene::codedsl;
 
-void Return(Value value) {
+void codedsl::Return(Value value) {
   CodeGen::emitCode("return ");
   value.emitValue();
   CodeGen::emitEndStatement();
 }
 
-void Puts(std::string str) { CodeGen::emitCode("puts(\"" + str + "\");\n"); }
+void codedsl::Puts(std::string str) {
+  CodeGen::emitCode("puts(\"" + str + "\");\n");
+}
 
-void If(Value cond, std::function<void()> thenDo,
-        std::function<void()> elseDo) {
+void codedsl::If(Value cond, std::function<void()> thenDo,
+                 std::function<void()> elseDo) {
   if (cond.type() != BoolType::get()) {
     throw std::runtime_error("Condition must be of type bool");
   }
@@ -35,7 +40,7 @@ void If(Value cond, std::function<void()> thenDo,
   }
 }
 
-void While(Value cond, std::function<void()> body) {
+void codedsl::While(Value cond, std::function<void()> body) {
   if (cond.type() != BoolType::get()) {
     throw std::runtime_error("Condition must be of type bool");
   }
@@ -46,15 +51,35 @@ void While(Value cond, std::function<void()> body) {
   CodeGen::emitCode("}\n");
 }
 
-void For(Value start, Value end, Value step, std::function<void(Value)> body,
-         bool reverse = false, TypeRef iteratorType = Type::INT32) {
+Variable codedsl::detail::ForStart(Value start, Value end, Value step,
+                                   bool reverse, TypeRef iteratorType) {
   CodeGen::emitCode("for (");
   Variable i(iteratorType, start);
-  CodeGen::emitStatement((i < end).expr());
-  i.assign(i + step, false);
+  if (reverse) {
+    CodeGen::emitStatement((i >= start).expr());
+    i.assign(i - step, false);
+  } else {
+    CodeGen::emitStatement((i < end).expr());
+    i.assign(i + step, false);
+  }
   CodeGen::emitCode(") {\n");
+  return i;
+}
+void codedsl::detail::ForEnd() { CodeGen::emitCode("}\n"); }
+
+void codedsl::For(Value start, Value end, Value step,
+                  std::function<void(Value)> body, TypeRef iteratorType) {
+  Variable i = detail::ForStart(start, end, step, false, iteratorType);
   body(i);
-  CodeGen::emitCode("}\n");
+  detail::ForEnd();
 }
 
-}  // namespace graphene::codedsl
+void codedsl::ForReverse(Value start, Value end, Value step,
+                         std::function<void(Value)> body,
+                         TypeRef iteratorType) {
+  Variable i = detail::ForStart(start, end, step, true, iteratorType);
+  body(i);
+  detail::ForEnd();
+}
+
+void codedsl::Break() { CodeGen::emitStatement("break"); }

@@ -16,36 +16,56 @@ class Vertex {
   /**
    * @brief Constructs and emits a Vertex with a given name, types, directions,
    * and compute function generator.
-   * @tparam F The type of the compute function generator.
    * @param name The name of the vertex.
-   * @param types The types of the vertex fields.
+   * @param types The types of the tensors. Must be native Poplar types.
    * @param directions The directions of the vertex fields (Input, Output,
    * InOut).
-   * @param computeFunctionGenerator The compute function generator. Must take
-   * the vertex fields as \ref Value arguments and return the compute \ref
-   * Function.
+   * @param computeFunctionGenerator The compute function generator. Must accept
+   * a vector of \ref MemberVariable and return the compute function. The
+   * generated function must be named "compute", accept a single argument (the
+   * worker id) or no argument, and return a boolean.
    */
-  template <typename F>
-  Vertex(std::string name, std::vector<TypeRef> types,
+  Vertex(std::string name, std::vector<TypeRef> elementTypes,
          std::vector<VertexInOutType::Direction> directions,
-         F computeFunctionGenerator) {
-    static_assert(
-        std::is_same_v<
-            typename graphene::detail::function_traits<F>::return_type,
-            Function>,
-        "Compute function generator must return a Function object");
-
+         std::function<Function(std::vector<Value>)> computeFunctionGenerator) {
     // Create the fields
-    for (size_t i = 0; i < types.size(); i++) {
-      TypeRef type = *(types.begin() + i);
-      auto direction = *(directions.begin() + i);
-      fields_.emplace_back(VertexInOutType::get(direction, type));
+    std::vector<Value> convertedFields_;
+    for (size_t i = 0; i < elementTypes.size(); i++) {
+      auto* elementType = elementTypes[i];
+
+      if (!elementType->poplarEquivalentType()) {
+        throw std::runtime_error(
+            "Element type must be representable in Poplar");
+      }
+
+      auto* vectorType =
+          VertexVectorType::get(elementType->poplarEquivalentType());
+      auto* fieldType = VertexInOutType::get(directions[i], vectorType);
+
+      spdlog::trace("Adding field of type {} with native element type {}",
+                    fieldType->str(),
+                    elementType->poplarEquivalentType()->str());
+      fields_.emplace_back(fieldType);
+
+      // Tensors of types unsupported by Poplar are converted to pointers of the
+      // correct type
+      if (elementType != elementType->poplarEquivalentType()) {
+        // Cast the vector type to the actual element type
+        auto* convertedVectorType = VertexVectorType::get(elementType);
+        auto* convertedFieldType =
+            VertexInOutType::get(directions[i], convertedVectorType);
+        convertedFields_.push_back(
+            fields_[i].reinterpretCast(convertedFieldType));
+      } else {
+        convertedFields_.push_back(fields_[i]);
+      }
     }
 
     // Generate the compute function
-    Function userFunc =
-        graphene::detail::callFunctionWithUnpackedArgs<Function>(
-            computeFunctionGenerator, fields_);
+    Function userFunc = computeFunctionGenerator(convertedFields_);
+    if (userFunc.expr() != "compute") {
+      throw std::runtime_error("Compute function must be named 'compute'");
+    }
 
     // Check if the compute function is valid
     if (userFunc.returnType() != BoolType::get()) {
@@ -60,17 +80,6 @@ class Vertex {
     }
 
     bool isMultiVertex = userFunc.args().size() == 1;
-    bool workerFuncHasCorrectName = userFunc.expr() == "compute";
-
-    // Create the worker function, which is a wrapper around the user-provided
-    // compute function with the correct name. If the user-provided compute
-    // function already has the correct name, we can use it directly.
-    Function workerFunc =
-        workerFuncHasCorrectName ? userFunc
-        : isMultiVertex
-            ? Function("compute", Type::BOOL, {Type::UINT32},
-                       [&](Parameter workerId) { return userFunc(workerId); })
-            : Function("compute", Type::BOOL, {}, [&]() { return userFunc(); });
 
     // Begin vertex generation
     CodeGen::emitCode("class " + name + " : public ::poplar::" +
@@ -88,6 +97,36 @@ class Vertex {
     }
 
     CodeGen::emitCode("};");
+  }
+
+  /**
+   * @brief Constructs and emits a Vertex with a given name, types, directions,
+   * and compute function generator.
+   * @param name The name of the vertex.
+   * @param types The types of the vertex fields.
+   * @param directions The directions of the vertex fields (Input, Output,
+   * InOut).
+   * @param computeFunctionGenerator The compute function generator. Must accept
+   * a one \ref MemberVariable per field and return the compute function. The
+   * generated function must be named "compute", accept a single argument (the
+   * worker id) or no argument, and return a boolean.
+   */
+  template <typename F>
+    requires ::graphene::detail::invocable_with_args_of<F, Value>
+  Vertex(std::string name, std::vector<TypeRef> types,
+         std::vector<VertexInOutType::Direction> directions,
+         F computeFunctionGenerator)
+      : Vertex(
+            name, types, directions,
+            [&computeFunctionGenerator](std::vector<MemberVariable> fields) {
+              return graphene::detail::callFunctionWithUnpackedArgs<Function>(
+                  computeFunctionGenerator, fields);
+            }) {
+    static_assert(
+        std::is_same_v<
+            typename graphene::detail::function_traits<F>::return_type,
+            Function>,
+        "Compute function generator must return a Function object");
   }
 
   const std::vector<MemberVariable>& fields() const { return fields_; }

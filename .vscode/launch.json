@@ -10,8 +10,29 @@
             "name": "Debug playground",
             "program": "${workspaceFolder}/build/applications/playground/playground",
             "args": [],
-            "env": {},
+            "env": {
+                "LIBTWOFLOAT_INCLUDE": "${workspaceFolder}/libgraphene/libs/twofloat/include"
+            },
+            "preRunCommands": [
+                "command script import ${workspaceFolder}/utils/lldb-scripts/poplarDataFormatters.py",
+                // "command script import ${workspaceFolder}/utils/lldb-scripts/grapheneDataFormatters.py"
+            ],
             "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "(ctest) Launch",
+            "program": "${cmake.testProgram}",
+            "args": [],
+            "env": {
+                "LIBTWOFLOAT_INCLUDE": "${workspaceFolder}/libgraphene/libs/twofloat/include"
+            },
+            "preRunCommands": [
+                "command script import ${workspaceFolder}/utils/lldb-scripts/poplarDataFormatters.py",
+                // "command script import ${workspaceFolder}/utils/lldb-scripts/grapheneDataFormatters.py"
+            ],
+            "cwd": "${cmake.testWorkingDirectory}"
         },
         {
             "type": "lldb",
@@ -19,14 +40,14 @@
             "name": "Debug benchmark",
             "program": "${workspaceFolder}/build/applications/benchmark/benchmark",
             "args": [
-                "data/benchmarks/restarter_pbicgstab_ilu0_verbose.jsonc",
-                "-t1472",
+                "data/benchmarks/ir_pbicgstab_ilu0_verbose_double_precision.jsonc",
+                "-t10",
                 // "-dprofiling/",
-                // "-mdata/matrices/laplacian_8x8x8/A.mtx",
-                "-p150,150,150"
+                // "-mdata/matrices/G3_circuit/G3_circuit.mtx",
+                "-p10,10,10"
             ],
             "env": {},
             "cwd": "${workspaceFolder}"
-        }
+        },
     ]
 }

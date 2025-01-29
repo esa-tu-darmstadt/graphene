@@ -1,1 +1,3 @@
-add_library(GrapheneCommon SHARED "Types.cpp")
+add_library(GrapheneCommon SHARED "Type.cpp")
+
+add_subdirectory(tests)

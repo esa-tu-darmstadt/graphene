@@ -53,6 +53,12 @@ class VertexInOutType : public Type {
   TypeRef elementType() const override;
 
   /**
+   * @brief Gets native poplar type, which is the innermost type.
+   *  I.e., poplar::Input<poplar::Vector<T>> -> T and poplar::Input<T> -> T.
+   */
+  TypeRef nativePoplarType() const;
+
+  /**
    * @brief Gets or creates a VertexInOutType instance.
    * @param direction The direction of the data flow.
    * @param elementType The type of elements.

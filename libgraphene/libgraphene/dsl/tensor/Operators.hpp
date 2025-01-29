@@ -3,12 +3,10 @@
 #include <optional>
 #include <poputil/VertexTemplates.hpp>
 
+#include "libgraphene/dsl/common/details/Expressions.hpp"
 #include "libgraphene/dsl/tensor/Expression.hpp"
-#include "libgraphene/dsl/tensor/Tensor.hpp"
 #include "libgraphene/dsl/tensor/Traits.hpp"
-#include "libgraphene/dsl/tensor/details/OperatorTraits.hpp"
-#include "libgraphene/util/Context.hpp"
-#include "libgraphene/util/DebugInfo.hpp"
+#include "libgraphene/dsl/tensor/details/Expressions.hpp"
 
 namespace graphene {
 
@@ -16,73 +14,30 @@ namespace detail {
 /**
  * @brief Helper function to wrap a DataType in an Expression if it's not
  * already one.
- *
- * @tparam T The type of the value.
- * @param value The value to wrap.
- * @return Expression<typename T::DataType> The wrapped expression.
  */
-template <DataTypeOrExpression T, DataType DataT = unwrap_expression<T>::type>
-Expression<DataT> wrapInExpression(const T &value) {
+template <DataTypeOrExpression T>
+Expression wrapInExpression(const T &value) {
   if constexpr (is_expression_v<T>) {
-    return Expression<typename T::DataType>(value);
+    return value;
   } else {
-    return Expression<T>(value);
+    return Expression(value);
   }
 }
 
-template <DataType T>
-Tensor<T> wrapInValue(T value) {
-  return Tensor<T>(value);
-}
-
-template <DataType T>
-const Tensor<T> &wrapInValue(const Tensor<T> &value) {
-  return value;
-}
-
-/**
- * @brief Shift placeholder indices in an expression.
- *
- * @param nodeConst The expression node to modify.
- * @param offset The offset to apply to placeholder indices.
- */
-void shiftPlaceHolderIndices(const popops::expr::Expr *nodeConst,
-                             unsigned int offset);
-
-/**
- * @brief Broadcast two shapes according to numpy broadcasting rules if
- * possible.
- *
- * @param shape1 The first shape.
- * @param shape2 The second shape.
- * @return std::optional<std::vector<size_t>> The broadcasted shape if the
- * shapes are compatible, otherwise std::nullopt.
- */
-std::optional<std::vector<size_t>> broadcastShapes(std::vector<size_t> shape1,
-                                                   std::vector<size_t> shape2);
-
 }  // namespace detail
 
-#define GRAPHENE_DEFINE_EXPR_UNARY_OP(name, op)                                \
-  namespace ops {                                                              \
-                                                                               \
-  template <PoplarNativeType T>                                                \
-    requires CompatibleTypeForUnaryOp<popops::expr::UnaryOpType::op, T>        \
-  auto name(const Expression<T> &value) {                                      \
-    using ReturnType =                                                         \
-        typename unary_op_return_type<popops::expr::UnaryOpType::op, T>::type; \
-                                                                               \
-    return Expression<ReturnType>(popops::expr::name(value.expr()),            \
-                                  value.placeholders());                       \
-  }                                                                            \
+#define GRAPHENE_DEFINE_EXPR_UNARY_OP(name, op)            \
+  namespace ops {                                          \
+  inline Expression name(const Expression &value) {        \
+    return Expression(std::make_unique<detail::UnaryExpr>( \
+        detail::UnaryOpType::op, value.base().clone()));   \
+  }                                                        \
   }  // namespace ops
 
-#define GRAPHENE_DEFINE_EXPR_UNARY_OP_AND_SYMBOL(name, op, symbol)           \
-  GRAPHENE_DEFINE_EXPR_UNARY_OP(name, op)                                    \
-  template <PoplarNativeType T>                                              \
-    requires ops::CompatibleTypeForUnaryOp<popops::expr::UnaryOpType::op, T> \
-  auto operator symbol(const Expression<T> &value) {                         \
-    return ops::name(value);                                                 \
+#define GRAPHENE_DEFINE_EXPR_UNARY_OP_AND_SYMBOL(name, op, symbol) \
+  GRAPHENE_DEFINE_EXPR_UNARY_OP(name, op)                          \
+  inline Expression operator symbol(const Expression &value) {     \
+    return ops::name(value);                                       \
   }
 
 GRAPHENE_DEFINE_EXPR_UNARY_OP(Abs, ABSOLUTE)
@@ -117,50 +72,27 @@ GRAPHENE_DEFINE_EXPR_UNARY_OP(Square, SQUARE)
 GRAPHENE_DEFINE_EXPR_UNARY_OP(Sigmoid, SIGMOID)
 GRAPHENE_DEFINE_EXPR_UNARY_OP(Rsqrt, RSQRT)
 
-#define GRAPHENE_DEFINE_EXPR_BINARY_OP(name, op)                              \
-  namespace ops {                                                             \
-                                                                              \
-  template <PoplarNativeTypeOrExpression T1, PoplarNativeTypeOrExpression T2> \
-    requires AtLeastOneExpression<T1, T2> &&                                  \
-             CompatibleTypesForBinaryOp<popops::expr::BinaryOpType::op, T1,   \
-                                        T2>                                   \
-  auto name(const T1 &lhs, const T2 &rhs) {                                   \
-    auto lhsExpr = detail::wrapInExpression(lhs);                             \
-    auto rhsExpr = detail::wrapInExpression(rhs);                             \
-                                                                              \
-    if (!detail::broadcastShapes(lhsExpr.shape(), rhsExpr.shape()))           \
-      throw std::runtime_error("Shapes are not compatible");                  \
-                                                                              \
-    using LeftType = typename decltype(lhsExpr)::DataType;                    \
-    using RightType = typename decltype(rhsExpr)::DataType;                   \
-    using ResultType = binary_op_return_type<popops::expr::BinaryOpType::op,  \
-                                             LeftType, RightType>::type;      \
-                                                                              \
-    std::vector<poplar::Tensor> placeholders = lhsExpr.placeholders();        \
-    placeholders.insert(placeholders.end(), rhsExpr.placeholders().begin(),   \
-                        rhsExpr.placeholders().end());                        \
-                                                                              \
-    if (lhsExpr.placeholders().size() > 0 &&                                  \
-        rhsExpr.placeholders().size() > 0) {                                  \
-      popops::expr::Expr &rhsInnerExpr =                                      \
-          const_cast<popops::expr::Any &>(rhsExpr.expr());                    \
-      detail::shiftPlaceHolderIndices(&rhsInnerExpr,                          \
-                                      lhsExpr.placeholders().size());         \
-    }                                                                         \
-                                                                              \
-    return Expression<ResultType>(                                            \
-        popops::expr::name(lhsExpr.expr(), rhsExpr.expr()), placeholders);    \
-  }                                                                           \
+#define GRAPHENE_DEFINE_EXPR_BINARY_OP(name, op)              \
+  namespace ops {                                             \
+                                                              \
+  template <DataTypeOrExpression T1, DataTypeOrExpression T2> \
+    requires AtLeastOneExpression<T1, T2>                     \
+  inline Expression name(const T1 &lhs, const T2 &rhs) {      \
+    auto lhsExpr = detail::wrapInExpression(lhs);             \
+    auto rhsExpr = detail::wrapInExpression(rhs);             \
+                                                              \
+    return Expression(std::make_unique<detail::BinaryExpr>(   \
+        detail::BinaryOpType::op, lhsExpr.base().clone(),     \
+        rhsExpr.base().clone()));                             \
+  }                                                           \
   }  // namespace ops
 
-#define GRAPHENE_DEFINE_EXPR_BINARY_OP_AND_SYMBOL(name, op, symbol)           \
-  GRAPHENE_DEFINE_EXPR_BINARY_OP(name, op)                                    \
-  template <PoplarNativeTypeOrExpression T1, PoplarNativeTypeOrExpression T2> \
-    requires AtLeastOneExpression<T1, T2> &&                                  \
-             ops::CompatibleTypesForBinaryOp<popops::expr::BinaryOpType::op,  \
-                                             T1, T2>                          \
-  auto operator symbol(const T1 &lhs, const T2 &rhs) {                        \
-    return ops::name(lhs, rhs);                                               \
+#define GRAPHENE_DEFINE_EXPR_BINARY_OP_AND_SYMBOL(name, op, symbol) \
+  GRAPHENE_DEFINE_EXPR_BINARY_OP(name, op)                          \
+  template <DataTypeOrExpression T1, DataTypeOrExpression T2>       \
+    requires AtLeastOneExpression<T1, T2>                           \
+  inline Expression operator symbol(const T1 &lhs, const T2 &rhs) { \
+    return ops::name(lhs, rhs);                                     \
   }
 
 GRAPHENE_DEFINE_EXPR_BINARY_OP_AND_SYMBOL(Add, ADD, +)
@@ -177,7 +109,6 @@ GRAPHENE_DEFINE_EXPR_BINARY_OP_AND_SYMBOL(Lte, LESS_THAN_EQUAL, <=)
 GRAPHENE_DEFINE_EXPR_BINARY_OP_AND_SYMBOL(And, LOGICAL_AND, &&)
 GRAPHENE_DEFINE_EXPR_BINARY_OP_AND_SYMBOL(Or, LOGICAL_OR, ||)
 GRAPHENE_DEFINE_EXPR_BINARY_OP_AND_SYMBOL(Lt, LESS_THAN, <)
-GRAPHENE_DEFINE_EXPR_BINARY_OP(InvStdDevToVariance, INV_STD_DEV_TO_VARIANCE)
 GRAPHENE_DEFINE_EXPR_BINARY_OP(Max, MAXIMUM)
 GRAPHENE_DEFINE_EXPR_BINARY_OP(Min, MINIMUM)
 GRAPHENE_DEFINE_EXPR_BINARY_OP_AND_SYMBOL(Mul, MULTIPLY, *)
@@ -186,113 +117,9 @@ GRAPHENE_DEFINE_EXPR_BINARY_OP(Pow, POWER)
 GRAPHENE_DEFINE_EXPR_BINARY_OP_AND_SYMBOL(Rem, REMAINDER, %)
 GRAPHENE_DEFINE_EXPR_BINARY_OP_AND_SYMBOL(Shl, SHIFT_LEFT, <<)
 GRAPHENE_DEFINE_EXPR_BINARY_OP_AND_SYMBOL(Shr, SHIFT_RIGHT, >>)
-GRAPHENE_DEFINE_EXPR_BINARY_OP(ShrSE, SHIFT_RIGHT_SIGN_EXTEND)
 GRAPHENE_DEFINE_EXPR_BINARY_OP_AND_SYMBOL(Sub, SUBTRACT, -)
-GRAPHENE_DEFINE_EXPR_BINARY_OP(VarianceToInvStdDev, VARIANCE_TO_INV_STD_DEV)
 
 #undef GRAPHENE_DEFINE_EXPR_BINARY_OP
 #undef GRAPHENE_DEFINE_EXPR_BINARY_OP_AND_SYMBOL
-
-namespace ops {
-
-template <DataTypeOrTensor T1, DataTypeOrTensor T2>
-  requires AtLeastOneTensor<T1, T2> && AtLeastOneTwoFloatTypeOrTensor<T1, T2> &&
-           CompatibleTypesForBinaryOp<popops::expr::BinaryOpType::ADD, T1, T2>
-auto Add(const T1 &lhs, const T2 &rhs) {
-  // When a Tensor<Type> is passed, the type is a **const reference** to the
-  // Value. When a DataType is passed, the type is Tensor<Type>.
-  decltype(detail::wrapInValue(lhs)) lhsValue = detail::wrapInValue(lhs);
-  decltype(detail::wrapInValue(rhs)) rhsValue = detail::wrapInValue(rhs);
-
-  std::optional<std::vector<size_t>> outShape =
-      detail::broadcastShapes(lhsValue.shape(), rhsValue.shape());
-  if (!outShape) throw std::runtime_error("Shapes are not compatible");
-
-  using LeftType = typename unwrap_expression<T1>::type;
-  using RightType = typename unwrap_expression<T2>::type;
-  using ResultType = binary_op_return_type<popops::expr::BinaryOpType::ADD,
-                                           LeftType, RightType>::type;
-
-  auto &graph = Context::graph();
-
-  // FIXME: Get the broadcasted tile mapping
-  poplar::Graph::TileToTensorMapping outMapping = lhsValue.tileMapping();
-  Tensor<ResultType> outValue(*outShape, outMapping);
-
-  std::string codeletName = poputil::templateVertex(
-      "graphene::ops::AddDoubleWord", lhsValue.tensor().elementType(),
-      rhsValue.tensor().elementType(), outValue.tensor().elementType());
-
-  DebugInfo di("DoubleWord");
-  poplar::ComputeSet cs = graph.addComputeSet(di);
-  for (size_t tile = 0; tile < outMapping.size(); ++tile) {
-    if (outMapping[tile].empty()) continue;
-    // FIXME: Flatten to vector
-    poplar::Tensor lhsTileTensor = lhsValue.tensorOnTile(tile);
-    poplar::Tensor rhsTileTensor = rhsValue.tensorOnTile(tile);
-    poplar::Tensor outTileTensor = outValue.tensorOnTile(tile);
-
-    poplar::VertexRef vertex = graph.addVertex(cs, codeletName);
-    graph.setTileMapping(vertex, tile);
-    graph.connect(vertex["lhs"], lhsTileTensor);
-    graph.connect(vertex["rhs"], rhsTileTensor);
-    graph.connect(vertex["out"], outTileTensor);
-    graph.setPerfEstimate(vertex, outTileTensor.numElements() * 15 + 100);
-  }
-
-  Context::program().add(poplar::program::Execute(cs, di));
-  return outValue;
-}
-
-template <DataTypeOrTensor T1, DataTypeOrTensor T2>
-  requires AtLeastOneTensor<T1, T2> &&
-           AtLeastOneDoublePrecisionTypeOrTensor<T1, T2> &&
-           CompatibleTypesForBinaryOp<popops::expr::BinaryOpType::ADD, T1, T2>
-auto Add(const T1 &lhs, const T2 &rhs) {
-  // When a Tensor<Type> is passed, the type is a **const reference** to the
-  // Value. When a DataType is passed, the type is Tensor<Type>.
-  decltype(detail::wrapInValue(lhs)) lhsValue = detail::wrapInValue(lhs);
-  decltype(detail::wrapInValue(rhs)) rhsValue = detail::wrapInValue(rhs);
-
-  std::optional<std::vector<size_t>> outShape =
-      detail::broadcastShapes(lhsValue.shape(), rhsValue.shape());
-  if (!outShape) throw std::runtime_error("Shapes are not compatible");
-
-  using LeftType = typename unwrap_expression<T1>::type;
-  using RightType = typename unwrap_expression<T2>::type;
-  using ResultType = binary_op_return_type<popops::expr::BinaryOpType::ADD,
-                                           LeftType, RightType>::type;
-
-  auto &graph = Context::graph();
-
-  // FIXME: Get the broadcasted tile mapping
-  poplar::Graph::TileToTensorMapping outMapping = lhsValue.tileMapping();
-  Tensor<ResultType> outValue(*outShape, outMapping);
-
-  std::string codeletName = poputil::templateVertex(
-      "graphene::ops::AddDoublePrecision", lhsValue.tensor().elementType(),
-      rhsValue.tensor().elementType(), outValue.tensor().elementType());
-
-  DebugInfo di("DoublePrecision");
-  poplar::ComputeSet cs = graph.addComputeSet(di);
-  for (size_t tile = 0; tile < outMapping.size(); ++tile) {
-    if (outMapping[tile].empty()) continue;
-    // FIXME: Flatten to vector
-    poplar::Tensor lhsTileTensor = lhsValue.tensorOnTile(tile);
-    poplar::Tensor rhsTileTensor = rhsValue.tensorOnTile(tile);
-    poplar::Tensor outTileTensor = outValue.tensorOnTile(tile);
-
-    poplar::VertexRef vertex = graph.addVertex(cs, codeletName);
-    graph.setTileMapping(vertex, tile);
-    graph.connect(vertex["lhs"], lhsTileTensor);
-    graph.connect(vertex["rhs"], rhsTileTensor);
-    graph.connect(vertex["out"], outTileTensor);
-    graph.setPerfEstimate(vertex, outTileTensor.numElements() * 15 + 100);
-  }
-
-  Context::program().add(poplar::program::Execute(cs, di));
-  return outValue;
-}
-}  // namespace ops
 
 }  // namespace graphene

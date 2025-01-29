@@ -17,6 +17,7 @@ Configuration::Configuration(nlohmann::json const& config) {
                          printPerformanceEachIteration);
   setFieldFromJSON<VectorNorm>(config, "norm", norm);
   setFieldFromJSON<bool>(config, "verbose", verbose);
+  setFieldFromJSON<TypeRef>(config, "workingType", workingType);
 
   if (config.contains("preconditioner"))
     preconditioner = solver::Configuration::fromJSON(config["preconditioner"]);

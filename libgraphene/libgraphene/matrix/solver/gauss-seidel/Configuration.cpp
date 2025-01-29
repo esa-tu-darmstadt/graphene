@@ -19,6 +19,7 @@ Configuration::Configuration(nlohmann::json const& config) {
   setFieldFromJSON<bool>(config, "printPerformanceEachIteration",
                          printPerformanceEachIteration);
   setFieldFromJSON<VectorNorm>(config, "norm", norm);
+  setFieldFromJSON<TypeRef>(config, "workingType", workingType);
 }
 
 }  // namespace graphene::matrix::solver::gaussseidel

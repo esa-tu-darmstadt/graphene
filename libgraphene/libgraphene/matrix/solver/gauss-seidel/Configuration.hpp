@@ -3,6 +3,7 @@
 #include <limits>
 #include <nlohmann/json_fwd.hpp>
 
+#include "libgraphene/common/Type.hpp"
 #include "libgraphene/matrix/Norm.hpp"
 #include "libgraphene/matrix/solver/Configuration.hpp"
 
@@ -21,6 +22,7 @@ struct Configuration : solver::Configuration,
   bool printPerformanceAfterSolve = false;
   bool printPerformanceEachIteration = false;
   VectorNorm norm = VectorNorm::L2;
+  TypeRef workingType = nullptr;
 
   Configuration() = default;
   Configuration(nlohmann::json const& config);

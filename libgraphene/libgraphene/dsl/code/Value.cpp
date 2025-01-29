@@ -18,7 +18,14 @@ std::string Value::expr() const { return expr_; }
 void Value::emitValue() const { CodeGen::emitCode(expr_); }
 
 Value Value::cast(TypeRef type) {
-  return Value(type, fmt::format("({}){}", type->str(), expr_), false);
+  return Value(type, fmt::format("(({}){})", type->str(), expr_), false);
+}
+
+Value Value::reinterpretCast(TypeRef type) {
+  return Value(type,
+               fmt::format("(*reinterpret_cast<{}>(&{}))",
+                           PtrType::get(type)->str(), expr_),
+               false);
 }
 
 Value Value::operator[](Value index) {
@@ -26,8 +33,8 @@ Value Value::operator[](Value index) {
     throw std::runtime_error(
         fmt::format("Type {} is not subscriptable", type_->str()));
   }
-  return Value(type()->elementType(), expr() + "[" + index.expr() + "]",
-               isAssignable_);
+  // TODO: Determine whether the result is assignable
+  return Value(type()->elementType(), expr() + "[" + index.expr() + "]", true);
 }
 
 Value Value::size() const {
@@ -60,18 +67,19 @@ Value::Value(TypeRef type, std::string expr, bool isAssignable)
 
 Variable::Variable(TypeRef type)
     : Value(type,
-            CodeGen::emitVariableDeclaration(type,
-                                             CodeGen::generateVariableName()),
-            true) {}
-
-Variable::Variable(TypeRef type, Value initializer)
-    : Value(type,
             CodeGen::emitVariableDeclaration(
-                type, CodeGen::generateVariableName(), initializer.expr()),
+                type, CodeGen::generateVariableName(), /*isConst=*/false),
             true) {}
 
-Variable::Variable(Value initializer)
-    : Variable(initializer.type(), initializer) {}
+Variable::Variable(TypeRef type, Value initializer, bool isConst)
+    : Value(type,
+            CodeGen::emitVariableDeclaration(type,
+                                             CodeGen::generateVariableName(),
+                                             isConst, initializer.expr()),
+            !isConst) {}
+
+Variable::Variable(Value initializer, bool isConst)
+    : Variable(initializer.type(), initializer, isConst) {}
 
 MemberVariable::MemberVariable(TypeRef type)
     : Value(type, CodeGen::generateVariableName(), true) {}
@@ -82,9 +90,10 @@ MemberVariable::MemberVariable(TypeRef type, Value initializer)
 
 void MemberVariable::declare() const {
   if (initializer_) {
-    CodeGen::emitVariableDeclaration(type(), expr(), initializer_->expr());
+    CodeGen::emitVariableDeclaration(type(), expr(),
+                                     /*isConst=*/false, initializer_->expr());
   } else {
-    CodeGen::emitVariableDeclaration(type(), expr());
+    CodeGen::emitVariableDeclaration(type(), expr(), /*isConst=*/false);
   }
 }
 

@@ -8,35 +8,44 @@
 
 #include "libgraphene/common/Concepts.hpp"
 #include "libgraphene/dsl/tensor/HostTensor.hpp"
-#include "libgraphene/dsl/tensor/HostTensorVariant.hpp"
 #include "libgraphene/matrix/host/TileLayout.hpp"
 #include "libgraphene/matrix/host/details/CoordinateFormat.hpp"
 #include "libgraphene/matrix/host/details/HostMatrixBase.hpp"
 namespace graphene::matrix::host::crs {
-template <DataType Type>
-class CRSHostMatrix : public HostMatrixBase<Type> {
+class CRSHostMatrix : public HostMatrixBase {
   struct CRSAddressing {
     std::vector<size_t> rowPtr;
     std::vector<size_t> colInd;
   };
-  struct CRSMatrix {
-    CRSAddressing addressing;
+  template <FloatDataType Type>
+  struct CRSMatrixValues {
     std::vector<Type> offDiagValues;
     std::vector<Type> diagValues;
   };
 
-  static CRSMatrix convertToCRS(TripletMatrix<Type> tripletMatrix);
+  template <FloatDataType Type>
+  static std::tuple<CRSAddressing, CRSMatrixValues<Type>> convertToCRS(
+      TripletMatrix<Type> tripletMatrix);
+  template <FloatDataType Type>
   static Partitioning calculatePartitioning(size_t numTiles,
-                                            const CRSMatrix &crs);
+                                            const CRSMatrixValues<Type> &crs,
+                                            const CRSAddressing &addressing);
   static std::vector<TileLayout> calculateTileLayouts(
-      const Partitioning &partitioning, const CRSMatrix &matrix);
+      const Partitioning &partitioning, const CRSAddressing &matrix);
+  static std::vector<CRSAddressing> calculateLocalAddressings(
+      const CRSAddressing &globalAddressing,
+      const std::vector<TileLayout> &tileLayouts);
 
-  void calculateLocalAddressings();
+  template <FloatDataType Type>
+  void decomposeValues(const CRSMatrixValues<Type> &globalMatrix);
+
   void calculateRowColors();
   void calculateColorAddressings();
-  void decomposeValues();
 
-  CRSMatrix globalMatrix_;
+  // the original addressing of the matrix
+  CRSAddressing globalAddressing_;
+
+  // the decomposed addressings of the matrix
   std::vector<CRSAddressing> localAddressings_;
 
   // For each tile, the color of each row
@@ -44,25 +53,28 @@ class CRSHostMatrix : public HostMatrixBase<Type> {
   // For each tile, the number of colors
   std::vector<size_t> numColors_;
 
-  AnyUIntHostValue rowPtr_;
-  AnyUIntHostValue colInd_;
+  HostTensor rowPtr_;
+  HostTensor colInd_;
 
-  AnyUIntHostValue colorSortAddr;
-  AnyUIntHostValue colorSortStartPtr;
+  HostTensor colorSortAddr;
+  HostTensor colorSortStartPtr;
 
-  HostTensor<Type> offDiagValues_;
-  HostTensor<Type> diagValues_;
+  HostTensor offDiagValues_;
+  HostTensor diagValues_;
 
  public:
+  template <FloatDataType Type>
   explicit CRSHostMatrix(TripletMatrix<Type> tripletMatrix, size_t numTiles,
                          std::string name = "matrix");
   CRSHostMatrix(const CRSHostMatrix &other) = delete;
-  CRSHostMatrix(CRSHostMatrix &&other) = default;
+  CRSHostMatrix(CRSHostMatrix &&other) = delete;
 
-  virtual matrix::Matrix<Type> copyToTile() override;
+  virtual matrix::Matrix copyToTile() override;
 
-  HostTensor<Type> decomposeOffDiagCoefficients(
-      const std::vector<Type> &values) const;
+  template <FloatDataType Type>
+  HostTensor decomposeOffDiagCoefficients(
+      const std::vector<Type> &values,
+      TypeRef targetType = getType<Type>()) const;
 
   MatrixFormat getFormat() const override { return MatrixFormat::CRS; }
 };

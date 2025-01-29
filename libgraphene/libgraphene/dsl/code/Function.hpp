@@ -12,19 +12,9 @@ namespace graphene::codedsl {
 class Function : public Value {
  public:
   /**
-   * @brief Constructs and emits a Function with a given return type, argument
-   * types, and code.
-   * @tparam F The type of the function code.
-   * @param resType The return type of the function.
-   * @param argTypes The argument types of the function.
-   * @param code The function code.
-   */
-  template <typename F>
-  Function(TypeRef resType, std::initializer_list<TypeRef> argTypes, F code);
-
-  /**
    * @brief Constructs and emits a named Function with a given return type,
-   * argument types, and code.
+   * argument types, and code. The code must accept one argument for each
+   * function argument.
    * @tparam F The type of the function code.
    * @param name The name of the function.
    * @param resType The return type of the function.
@@ -32,14 +22,39 @@ class Function : public Value {
    * @param code The function code.
    */
   template <typename F>
+    requires ::graphene::detail::invocable_with_args_of<F, Parameter>
   Function(std::string name, TypeRef resType,
            std::initializer_list<TypeRef> argTypes, F code)
-      : Value(VoidType::get(), name), resType_(resType) {
-    constexpr size_t numArgs = graphene::detail::function_traits<F>::arity;
-    if (numArgs != argTypes.size()) {
-      throw std::runtime_error("Number of arguments does not match");
-    }
+      : Function(name, resType, argTypes, [&code](std::vector<Parameter> args) {
+          ::graphene::detail::callFunctionWithUnpackedArgs<void>(code, args);
+        }) {}
 
+  /**
+   * @brief Constructs and emits a named Function with a given return type,
+   *  no arguments, and code. The code must accept no arguments.
+   * @tparam F The type of the function code.
+   * @param name The name of the function.
+   * @param resType The return type of the function.
+   * @param code The function code.
+   */
+  Function(std::string name, TypeRef resType, std::function<void()> code)
+      : Function(name, resType, {},
+                 [&code](std::vector<Parameter> args) { code(); }) {}
+
+  /**
+   * @brief Constructs and emits a named Function with a given return type,
+   * argument types, and code. The code must accept a vector of arguments as its
+   * only argument.
+   * @tparam F The type of the function code.
+   * @param name The name of the function.
+   * @param resType The return type of the function.
+   * @param argTypes The argument types of the function.
+   * @param code The function code.
+   */
+  Function(std::string name, TypeRef resType,
+           std::initializer_list<TypeRef> argTypes,
+           std::function<void(std::vector<Parameter>)> code)
+      : Value(VoidType::get(), name), resType_(resType) {
     // Begin function generation
     CodeGen::beginFunction();
 
@@ -66,13 +81,13 @@ class Function : public Value {
     CodeGen::emitCode(") {\n");
 
     // Call the user-provided code
-    ::graphene::detail::callFunctionWithUnpackedArgs<void>(code, args_);
+    code(args_);
 
     CodeGen::emitCode("}");
 
     // End function generation
     std::string content = CodeGen::endFunction(this->expr());
-    spdlog::info("Generated function: {}", content);
+    ;
   }
 
   /**

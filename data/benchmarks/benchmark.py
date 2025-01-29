@@ -83,20 +83,26 @@ class IPUSemaphore:
 
 
 def main():
+    # log_dir = "logs/profiling_runs/"
     log_dir = "logs/convergence_plot/"
     config_files = [
         # "ir_gs.jsonc",
         # "spmv.jsonc",
         # "ilu0.jsonc",
         # "ir_pbicgstab_ilu0.jsonc",
-        "ir_pbicgstab_ilu0_verbose_nomixedprecision.jsonc",
+        # "ir_pbicgstab_ilu0_verbose_nomixedprecision.jsonc",
         # "ir_pbicgstab_ilu0_verbose.jsonc",
+        "ir_pbicgstab_ilu0_verbose_double_precision.jsonc",
         # "restarter_pbicgstab_ilu0_verbose.jsonc",
     ]
-    config_files_that_require_profiling = ["spmv.jsonc", "ilu0.jsonc"]
+    config_files_that_require_profiling = [
+        "spmv.jsonc",
+        "ilu0.jsonc",
+        "ir_pbicgstab_ilu0.jsonc",
+    ]
     matrices = [
-        "-m../matrices/Hook_1498/Hook_1498.mtx",
-        "-m../matrices/G3_circuit/G3_circuit.mtx",
+        # "-m../matrices/Hook_1498/Hook_1498.mtx",
+        # "-m../matrices/G3_circuit/G3_circuit.mtx",
         "-m../matrices/Geo_1438/Geo_1438.mtx",
         "-m../matrices/af_shell7/af_shell7.mtx",
         # "-p150,150,150",

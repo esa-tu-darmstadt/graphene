@@ -3,7 +3,10 @@
 #include <cstddef>
 #include <poplar/Interval.hpp>
 #include <poplar/Program.hpp>
+#include <stdexcept>
 
+#include "libgraphene/common/Shape.hpp"
+#include "libgraphene/common/TileMapping.hpp"
 #include "libgraphene/matrix/Norm.hpp"
 #include "libgraphene/matrix/host/TileLayout.hpp"
 #include "libgraphene/matrix/host/details/HostMatrixBase.hpp"
@@ -12,9 +15,7 @@
 #include "libgraphene/util/PoplarHelpers.hpp"
 
 namespace graphene::matrix {
-template <DataType Type>
-template <typename VectorType>
-void MatrixBase<Type>::exchangeHaloCells(Tensor<VectorType> &value) const {
+void MatrixBase::exchangeHaloCells(Tensor &value) const {
   DebugInfo di("MatrixBase");
 
   struct ExchangeHaloCellsMetadata {
@@ -29,18 +30,15 @@ void MatrixBase<Type>::exchangeHaloCells(Tensor<VectorType> &value) const {
     return;
   }
 
-  // Get the mapping
-  auto [mapping, shape] = hostMatrix.getVectorTileMappingAndShape(true);
-
   // Make sure that the vector is compatible with the matrix layout
-  if (!this->isVectorCompatible(value, true, false))
+  if (!this->isVectorCompatible(value, true))
     throw std::runtime_error(
         "Vector x is not compatible with the layout of the matrix");
 
   std::vector<poplar::Tensor> srcTensors;
   std::vector<poplar::Tensor> destTensors;
 
-  for (size_t tile = 0; tile < mapping.size(); ++tile) {
+  for (size_t tile = 0; tile < hostMatrix.numTiles(); ++tile) {
     poplar::Tensor destTileTensor = value.tensorOnTile(tile);
     const host::TileLayout &destLayout = hostMatrix.getTileLayout(tile);
 
@@ -94,111 +92,54 @@ void MatrixBase<Type>::exchangeHaloCells(Tensor<VectorType> &value) const {
   spdlog::trace("Creating new exchange program");
 }
 
-template <DataType Type>
-template <typename VectorType>
-bool MatrixBase<Type>::isVectorCompatible(const Tensor<VectorType> &value,
-                                          bool withHalo,
-                                          bool tileMappingMustMatch) const {
-  auto [mapping, shape] = hostMatrix.getVectorTileMappingAndShape(withHalo);
-  if (value.shape() != shape) return false;
+bool MatrixBase::isVectorCompatible(const Tensor &value, bool withHalo) const {
+  DistributedShape shape = hostMatrix.getVectorShape(withHalo);
+  TileMapping linearMapping = TileMapping::linearMappingWithShape(shape);
 
-  if (!tileMappingMustMatch) return true;
+  if (value.shape().firstDimDistribution() != shape.firstDimDistribution())
+    return false;
 
-  // Check that the tile mapping is the same. Allow for empty mappings on both
-  // sides.
-  for (size_t tile = 0;
-       tile < std::max(value.tileMapping().size(), mapping.size()); ++tile) {
-    bool valueHasMappingOnThisTile =
-        value.tileMapping().size() > tile && !value.tileMapping()[tile].empty();
-    bool matrixHasMappingOnThisTile =
-        mapping.size() > tile && !mapping[tile].empty();
+  // We expect a linear mapping for the vector
+  if (linearMapping != value.tileMapping()) return false;
 
-    if (valueHasMappingOnThisTile != matrixHasMappingOnThisTile) return false;
-  }
   return true;
 }
 
-template <DataType Type>
-template <typename VectorType>
-Tensor<VectorType> MatrixBase<Type>::stripHaloCellsFromVector(
-    const Tensor<VectorType> &x) const {
-  auto [mappingWithoutHalo, shapeWithoutHalo] =
-      hostMatrix.getVectorTileMappingAndShape(false);
+Tensor MatrixBase::stripHaloCellsFromVector(const Tensor &x) const {
+  DistributedShape shapeWithoutHalo = hostMatrix.getVectorShape(false);
 
   // If the shape is already correct, return the input
-  if (x.shape() == shapeWithoutHalo) return x;
+  if (x.shape() == shapeWithoutHalo) return x.same();
 
-  auto [mappingWithHalo, shapeWithHalo] =
-      hostMatrix.getVectorTileMappingAndShape(true);
+  DistributedShape shapeWithHalo = hostMatrix.getVectorShape(true);
 
   if (x.shape() != shapeWithHalo) {
-    throw std::runtime_error(
+    throw std::invalid_argument(
         "The vector must be compatible with the matrix layout, either with or "
         "without halo cells");
   }
 
-  std::vector<poplar::Tensor> tensors(mappingWithoutHalo.size());
-  for (size_t tile = 0; tile < mappingWithoutHalo.size(); ++tile) {
-    if (mappingWithoutHalo[tile].empty()) continue;
-    std::vector<poplar::Interval> &intervalsOnThisTile =
-        mappingWithoutHalo[tile];
-    if (intervalsOnThisTile.size() > 1) {
-      throw std::runtime_error(
-          "stripHaloCellsFromVector does not support multiple intervals on a "
-          "tile");
-    }
-    poplar::Tensor tileTensor = x.tensor();
-    tensors[tile] = tileTensor.slice(intervalsOnThisTile[0].begin(),
-                                     intervalsOnThisTile[0].end());
+  std::vector<poplar::Tensor> tensors;
+  tensors.reserve(numTiles());
+
+  for (auto [tile, rowsWithoutHalo] : shapeWithoutHalo.firstDimDistribution()) {
+    poplar::Tensor tileTensor = x.tensorOnTile(tile);
+    tensors.push_back(tileTensor.slice(0, rowsWithoutHalo));
   }
-  return Tensor<VectorType>(poplar::concat(tensors));
+
+  return Tensor::fromPoplar(poplar::concat(tensors), x.type());
 }
 
-template <DataType Type>
-template <typename VectorType>
-Tensor<VectorType> MatrixBase<Type>::vectorNorm(
-    VectorNorm norm, const Tensor<VectorType> &x) const {
-  Tensor<VectorType> stripped = stripHaloCellsFromVector(x);
+Tensor MatrixBase::vectorNorm(VectorNorm norm, const Tensor &x) const {
+  Tensor stripped = stripHaloCellsFromVector(x);
   return stripped.norm(norm);
 }
 
-template <DataType Type>
-template <typename VectorType>
-Tensor<VectorType> MatrixBase<Type>::createUninitializedVector(
-    bool withHalo) const {
-  auto [mapping, shape] = hostMatrix.getVectorTileMappingAndShape(withHalo);
-  return Tensor<VectorType>(shape, mapping);
+Tensor MatrixBase::createUninitializedVector(TypeRef type,
+                                             bool withHalo) const {
+  DistributedShape shape = hostMatrix.getVectorShape(withHalo);
+  TileMapping mapping = TileMapping::linearMappingWithShape(shape);
+  return Tensor::uninitialized(type, shape, mapping, "vector");
 }
-
-// Template instantiations
-#define INSTANTIATE(T)                                                         \
-  template class MatrixBase<T>;                                                \
-  template void MatrixBase<T>::exchangeHaloCells(Tensor<T> &value) const;      \
-  template bool MatrixBase<T>::isVectorCompatible(                             \
-      const Tensor<T> &value, bool withHalo, bool tileMappingMustMatch) const; \
-  template Tensor<T> MatrixBase<T>::stripHaloCellsFromVector(                  \
-      const Tensor<T> &x) const;                                               \
-  template Tensor<T> MatrixBase<T>::vectorNorm(VectorNorm norm,                \
-                                               const Tensor<T> &x) const;      \
-  template Tensor<T> MatrixBase<T>::createUninitializedVector(bool withHalo)   \
-      const;
-
-INSTANTIATE(float)
-
-// Additionally, instantiate the template for mixed precision
-template void MatrixBase<float>::exchangeHaloCells(
-    Tensor<doubleword> &value) const;
-template bool MatrixBase<float>::isVectorCompatible(
-    const Tensor<doubleword> &value, bool withHalo,
-    bool tileMappingMustMatch) const;
-template Tensor<doubleword> MatrixBase<float>::stripHaloCellsFromVector(
-    const Tensor<doubleword> &x) const;
-// Additionally, instantiate the template for mixed precision
-template void MatrixBase<float>::exchangeHaloCells(Tensor<double> &value) const;
-template bool MatrixBase<float>::isVectorCompatible(
-    const Tensor<double> &value, bool withHalo,
-    bool tileMappingMustMatch) const;
-template Tensor<double> MatrixBase<float>::stripHaloCellsFromVector(
-    const Tensor<double> &x) const;
 
 }  // namespace graphene::matrix

@@ -5,16 +5,19 @@
 #include <poplar/GraphElements.hpp>
 #include <poplar/Interval.hpp>
 #include <poplar/Type.hpp>
-#include <popops/Expr.hpp>
-#include <popops/Reduce.hpp>
 #include <poputil/VertexTemplates.hpp>
+#include <stdexcept>
 #include <type_traits>
 
 #include "libgraphene/common/Concepts.hpp"
+#include "libgraphene/common/Shape.hpp"
+#include "libgraphene/common/TileMapping.hpp"
 #include "libgraphene/common/Traits.hpp"
 #include "libgraphene/dsl/tensor/Expression.hpp"
+#include "libgraphene/dsl/tensor/HostTensor.hpp"
 #include "libgraphene/dsl/tensor/Operators.hpp"
 #include "libgraphene/dsl/tensor/RemoteTensor.hpp"
+#include "libgraphene/dsl/tensor/details/Expressions.hpp"
 #include "libgraphene/matrix/Norm.hpp"
 #include "libgraphene/util/Context.hpp"
 #include "libgraphene/util/DebugInfo.hpp"
@@ -23,255 +26,35 @@
 #include "libgraphene/util/Tracepoint.hpp"
 #include "libtwofloat/twofloat.hpp"
 
-namespace graphene {
+using namespace graphene;
 
-template <DataType Type>
-Tensor<Type>::Tensor(std::vector<size_t> shape, TileMapping tileMapping,
-                     std::string name)
-    : Expression<Type>(
-          Context::graph().addVariable(Traits<Type>::PoplarType, shape, name)) {
-  if (tileMapping.empty()) {
-    Context::graph().setTileMapping(tensor(), 0);
-  } else {
-    Context::graph().setTileMapping(tensor(), tileMapping);
-  }
-}
+namespace {
+Tensor unrollTwoFloatValue(const Tensor &value) {
+  assert(value.type() == Type::TWOFLOAT32);
 
-template <DataType Type>
-Tensor<Type>::Tensor(Type value, std::string name)
-    : Tensor<Type>({value}, {}, {}, name) {}
-
-template <DataType Type>
-Tensor<Type>::Tensor(std::initializer_list<Type> values,
-                     std::vector<size_t> shape, TileMapping tileMapping,
-                     std::string name)
-    : Expression<Type>(Context::graph().addVariable(
-          Traits<Type>::PoplarType,
-          shape.empty() ? std::vector<size_t>{values.size()} : shape, name)) {
-  auto &graph = Context::graph();
-
-  // Remember that we cannot use Graph::setInitialValue, because the initial
-  // value is only set once. If the value is used in a loop, the value would not
-  // be reset to the initial value in each iteration.
-
-  // Transform the values to the host type if necessary
-  using HostType = typename Traits<Type>::PoplarHostType;
-  poplar::ArrayRef<HostType> hostValueArrayRef;
-  std::vector<HostType> hostValues;
-  if constexpr (!std::is_same_v<Type, typename Traits<Type>::PoplarHostType>) {
-    hostValues.reserve(values.size());
-    for (auto value : values) {
-      hostValues.push_back(toPoplarHostType(value));
-    }
-    hostValueArrayRef = poplar::ArrayRef<HostType>(hostValues);
-  } else {
-    hostValueArrayRef = values;
-  }
-
-  if (tileMapping.empty()) {
-    tileMapping = {{poplar::Interval(0, this->tensor().numElements())}};
-  }
-
-  poplar::Tensor constant = graph.addConstant(
-      Traits<Type>::PoplarType, this->tensor().shape(), hostValueArrayRef);
-
-  graph.setTileMapping(constant, tileMapping);
-  graph.setTileMapping(this->tensor(), tileMapping);
-
-  Context::program().add(poplar::program::Copy(constant, this->tensor()));
-}
-
-template <DataType Type>
-Tensor<Type>::Tensor(const poplar::Tensor tensor) : Expression<Type>(tensor) {
-  if (tensor.containsConstant())
-    throw std::runtime_error("Tensor must not contain constants");
-}
-
-template <DataType Type>
-Tensor<Type>::Tensor(const Expression<Type> expr)
-  requires PoplarNativeType<Type>
-    : Tensor(materializeExpression(expr)) {}
-
-template <DataType Type>
-Tensor<Type> &Tensor<Type>::operator=(const Expression<Type> &expr)
-  requires PoplarNativeType<Type>
-{
-  // Materialize the expression into this tensor
-  materializeExpression(expr, *this);
-  return *this;
-}
-
-template <DataType Type>
-Tensor<Type> &Tensor<Type>::operator=(const Tensor &value) {
-  Context::program().add(poplar::program::Copy(value.tensor(), tensor()));
-  return *this;
-}
-
-template <DataType Type>
-Tensor<Type>::Tensor(const Tensor &value)
-    : Tensor(Context::graph().clone(value.tensor())) {
-  // Use the assignment operator to copy the tensor
-  *this = value;
-}
-
-template <DataType Type>
-const TileMapping &Tensor<Type>::tileMapping() const {
-  if (!tileMapping_) {
-    tileMapping_ = Context::graph().getTileMapping(tensor());
-  }
-  return *tileMapping_;
-}
-
-template <DataType Type>
-const std::vector<size_t> &Tensor<Type>::shape() const {
-  if (!shape_) {
-    shape_ = Expression<Type>::shape();
-  }
-  return *shape_;
-}
-
-template <DataType Type>
-poplar::Tensor Tensor<Type>::tensor(bool flattenIfScalar) const {
-  assert(this->placeholders().size() == 1);
-  poplar::Tensor tensor = this->placeholders()[0];
-  if (flattenIfScalar && tensor.numElements() == 1) return tensor.flatten()[0];
-  return tensor;
-}
-
-template <DataType Type>
-poplar::Tensor Tensor<Type>::tensorOnTile(size_t tile,
-                                          bool flattenIfScalar) const {
-  assert(this->placeholders().size() == 1);
-
-  if (this->shape().empty()) return poplar::Tensor();
-
-  // If the first dimension is 1, the tensor is broadcasted to all tiles
-  if (this->shape()[0] == 1) {
-    return tensor(flattenIfScalar);
-  }
-
-  // If the tensor is neither broadcasted nor mapped to the tile, return an
-  // empty tensor
-  if (tileMapping()[tile].empty()) return poplar::Tensor();
-
-  poplar::Tensor tensor =
-      sliceTensorToTile(this->placeholders()[0], tile, &tileMapping());
-
-  if (flattenIfScalar && tensor.numElements() == 1) return tensor.flatten()[0];
-  return tensor;
-}
-
-template <DataType Type>
-void Tensor<Type>::print(std::string name, poplar::PrintTensorFmt fmt) const {
-  DebugInfo di("name", DI_ARGS(name));
-  auto ipuIntervals = calculateIPUIntervals(tileMapping());
-  if (name.empty()) name = "<unnamed>";
-
-  poplar::Tensor unrolledTensor = tensor();
-  if constexpr (std::is_same_v<Type, double>) {
-    auto unrolledValue = unrollTwoFloatValue(*this);
-    unrolledTensor = unrolledValue.tensor();
-  }
-
-  for (size_t ipu = 0; ipu < ipuIntervals.size(); ++ipu) {
-    if (ipuIntervals[ipu].size() == 0) continue;
-    std::string localName = name;
-    if (ipuIntervals.size() > 1) localName += "#ipu" + std::to_string(ipu);
-    Context::program().add(poplar::program::PrintTensor(
-        localName, sliceTensorToIPU(unrolledTensor, ipu), fmt, di));
-  }
-}
-
-template <DataType Type>
-RemoteTensor<Type> Tensor<Type>::copyToRemote() const {
   GRAPHENE_TRACEPOINT();
-  DebugInfo di("RemoteValue", DI_ARGS(tensor()));
-
-  poplar::Tensor tensor = this->tensor();
-  poplar::Graph::TileToTensorMapping tileMapping =
-      Context::graph().getTileMapping(tensor);
-
-  auto ipuIntervals = calculateIPUIntervals(tileMapping);
-  std::vector<poplar::RemoteBuffer> buffers;
-  for (size_t ipu = 0; ipu < ipuIntervals.size(); ++ipu) {
-    std::string handle = Runtime::instance().registerHandle(
-        "hostToRemote_ipu" + std::to_string(ipu));
-    poplar::RemoteBuffer buffer = Context::graph().addRemoteBuffer(
-        handle, Traits<Type>::PoplarType, ipuIntervals[ipu].size());
-    Context::program().add(
-        poplar::program::Copy(tensor.flatten().slice(ipuIntervals[ipu].begin(),
-                                                     ipuIntervals[ipu].end()),
-                              buffer, di));
-    buffers.push_back(buffer);
-  }
-
-  return RemoteTensor<Type>(buffers, tileMapping, tensor.shape(),
-                            tensor.getDebugStr());
-}
-
-template <DataType Type>
-Tensor<Type> Tensor<Type>::reduce(const std::vector<size_t> dims,
-                                  popops::ReduceParams params) const
-  requires PoplarNativeType<Type>
-{
-  GRAPHENE_TRACEPOINT();
-  DebugInfo di("RemoteValue", DI_ARGS(tensor()));
-
-  poplar::Tensor tensor = this->tensor();
-  poplar::Tensor reduced = popops::reduce(Context::graph(), tensor, dims,
-                                          params, Context::program(), di);
-  di.addOutput(reduced);
-  return Tensor<Type>(reduced);
-}
-
-template <DataType Type>
-Expression<Type> Tensor<Type>::norm(VectorNorm type) const
-  requires PoplarNativeType<Type>
-{
-  GRAPHENE_TRACEPOINT();
-  DebugInfo di("RemoteValue", DI_ARGS(tensor()));
-
-  switch (type) {
-    case VectorNorm::L1:
-      return reduce({0}, popops::ReduceParams(popops::Operation::ADD));
-    case VectorNorm::L2:
-      return ops::Sqrt(
-          reduce({0}, popops::ReduceParams(popops::Operation::SQUARE_ADD)));
-    case VectorNorm::LINF:
-      return reduce({0}, popops::ReduceParams(popops::Operation::MAX));
-    default:
-      throw std::runtime_error("Invalid vector norm");
-  }
-}
-
-Tensor<float> unrollTwoFloatValue(const Tensor<double> &value) {
-  GRAPHENE_TRACEPOINT();
-  DebugInfo di("Value", DI_ARGS(value.tensor()));
+  DebugInfo di("Tensor", DI_ARGS(value.tensor()));
   auto &graph = Context::graph();
 
   // Add a new dimension of size 2 to the end of the shape
-  std::vector<size_t> resultShape = value.tensor().shape();
+  DistributedShape resultShape = value.shape();
   resultShape.push_back(2);
 
   // Double the size of each interval in the tile mapping
-  poplar::Graph::TileToTensorMapping resultMapping = value.tileMapping();
-  for (auto &intervals : resultMapping) {
-    for (auto &interval : intervals) {
-      interval = poplar::Interval(interval.begin() * 2, interval.end() * 2);
-    }
-  }
+  TileMapping resultMapping = value.tileMapping().scaleUp(2);
 
-  Tensor<float> unrolled(resultShape, resultMapping);
+  Tensor unrolled =
+      Tensor::uninitialized(Type::FLOAT32, resultShape, resultMapping);
 
   poplar::ComputeSet cs = graph.addComputeSet(di);
-  for (size_t tile = 0; tile < value.tileMapping().size(); ++tile) {
+  for (size_t tile = 0; tile < value.tileMapping().maxTile(); ++tile) {
     if (value.tileMapping()[tile].empty()) continue;
 
     // Get in and out tensors on the tile and flatten to a vector
     poplar::Tensor tileTensor =
-        value.tensorOnTile(tile).flatten(0, value.shape().size());
+        value.tensorOnTile(tile).flatten(0, value.shape().rank());
     poplar::Tensor unrolledTileTensor =
-        unrolled.tensorOnTile(tile).flatten(0, unrolled.shape().size());
+        unrolled.tensorOnTile(tile).flatten(0, unrolled.shape().rank());
 
     std::string codeletName =
         poputil::templateVertex("graphene::ops::UnrollDoubleWordVertex");
@@ -287,151 +70,287 @@ Tensor<float> unrollTwoFloatValue(const Tensor<double> &value) {
 
   return unrolled;
 }
+}  // namespace
 
-template <DataType Type>
-template <typename DestType>
-Tensor<DestType> Tensor<Type>::cast() const
-  requires std::is_same_v<Type, doubleword> && std::is_same_v<DestType, float>
-{
-  GRAPHENE_TRACEPOINT();
-  DebugInfo di("Value", DI_ARGS(tensor()));
+namespace graphene {
 
-  auto &graph = Context::graph();
-  auto &program = Context::program();
+/// Create an uninitialized tensor
+Tensor::Tensor(TypeRef type, DistributedShape shape, TileMapping tileMapping,
+               std::string name)
+    : Expression(Context::graph().addVariable(
+                     type->poplarEquivalentType()->poplarType(),
+                     shape.globalShape().toPoplar(), name),
+                 type) {
+  if (tileMapping.empty())
+    tileMapping = TileMapping::linearMappingWithShape(shape);
 
-  Tensor<float> casted(this->shape(), this->tileMapping());
+  if (!tileMapping.isCompatibleWithShape(shape))
+    throw std::invalid_argument("Tile mapping is not compatible with shape");
 
-  poplar::ComputeSet cs = graph.addComputeSet(di);
-  for (size_t tile = 0; tile < tileMapping().size(); ++tile) {
-    if (tileMapping()[tile].empty()) continue;
-
-    // FIXME: Use flattenToVector
-    poplar::Tensor tileTensor = tensorOnTile(tile).flatten();
-    poplar::Tensor castedTileTensor = casted.tensorOnTile(tile).flatten();
-
-    std::string codeletName =
-        poputil::templateVertex("graphene::ops::CastDoubleWordToFloatVertex");
-    poplar::VertexRef v = graph.addVertex(cs, codeletName);
-
-    graph.connect(v["in"], tileTensor);
-    graph.connect(v["out"], castedTileTensor);
-    graph.setPerfEstimate(v, tileTensor.numElements() * 3 + 100);
-    graph.setTileMapping(v, tile);
-  }
-
-  program.add(poplar::program::Execute(cs, di));
-
-  return casted;
-}
-template <DataType Type>
-template <typename DestType>
-Tensor<DestType> Tensor<Type>::cast() const
-  requires std::is_same_v<Type, float> && std::is_same_v<DestType, doubleword>
-{
-  GRAPHENE_TRACEPOINT();
-  DebugInfo di("Value", DI_ARGS(tensor()));
-
-  auto &graph = Context::graph();
-  auto &program = Context::program();
-
-  Tensor<doubleword> casted(this->shape(), this->tileMapping());
-
-  poplar::ComputeSet cs = graph.addComputeSet(di);
-  for (size_t tile = 0; tile < tileMapping().size(); ++tile) {
-    if (tileMapping()[tile].empty()) continue;
-
-    // FIXME: Use flattenToVector
-    poplar::Tensor tileTensor = tensorOnTile(tile).flatten();
-    poplar::Tensor castedTileTensor = casted.tensorOnTile(tile).flatten();
-
-    std::string codeletName =
-        poputil::templateVertex("graphene::ops::CastFloatToDoubleWordVertex");
-    poplar::VertexRef v = graph.addVertex(cs, codeletName);
-
-    graph.connect(v["in"], tileTensor);
-    graph.connect(v["out"], castedTileTensor);
-    graph.setPerfEstimate(v, tileTensor.numElements() * 3 + 100);
-    graph.setTileMapping(v, tile);
-  }
-
-  program.add(poplar::program::Execute(cs, di));
-
-  return casted;
+  Context::graph().setTileMapping(tensor(), tileMapping.toPoplar());
 }
 
+/// Create an initialized tensor
 template <DataType Type>
-template <typename DestType>
-Tensor<DestType> Tensor<Type>::cast() const
-  requires std::is_same_v<Type, double> && std::is_same_v<DestType, float>
-{
-  GRAPHENE_TRACEPOINT();
-  DebugInfo di("Value", DI_ARGS(tensor()));
-
+Tensor::Tensor(std::initializer_list<Type> values,
+               std::optional<DistributedShape> shape, TileMapping tileMapping,
+               std::string name)
+    : Expression(Context::graph().addVariable(
+                     getType<Type>()->poplarEquivalentType()->poplarType(),
+                     shape ? shape->globalShape().toPoplar()
+                           : std::vector<size_t>{{values.size()}},
+                     name),
+                 getType<Type>()) {
   auto &graph = Context::graph();
-  auto &program = Context::program();
 
-  Tensor<float> casted(this->shape(), this->tileMapping());
+  // Remember that we cannot use Graph::setInitialValue, because the initial
+  // value is only set once. If the value is used in a loop, the value would not
+  // be reset to the initial value in each iteration.
 
-  poplar::ComputeSet cs = graph.addComputeSet(di);
-  for (size_t tile = 0; tile < tileMapping().size(); ++tile) {
-    if (tileMapping()[tile].empty()) continue;
+  // Transform the values to the host type if necessary
+  using HostType = typename Traits<Type>::PoplarHostType;
+  poplar::ArrayRef<HostType> hostValueArrayRef;
+  std::vector<HostType> hostValues;
+  hostValues.reserve(values.size());
+  for (auto value : values) {
+    hostValues.push_back(toPoplarHostType(value));
+  }
+  hostValueArrayRef = poplar::ArrayRef<HostType>(hostValues);
 
-    // FIXME: Use flattenToVector
-    poplar::Tensor tileTensor = tensorOnTile(tile).flatten();
-    poplar::Tensor castedTileTensor = casted.tensorOnTile(tile).flatten();
-
-    std::string codeletName = poputil::templateVertex(
-        "graphene::ops::CastDoublePrecisionToFloatVertex");
-    poplar::VertexRef v = graph.addVertex(cs, codeletName);
-
-    graph.connect(v["in"], tileTensor);
-    graph.connect(v["out"], castedTileTensor);
-    graph.setPerfEstimate(v, tileTensor.numElements() * 3 + 100);
-    graph.setTileMapping(v, tile);
+  if (!shape) {
+    if (!tileMapping.empty())
+      throw std::invalid_argument(
+          "Shape must be provided if tile mapping is provided");
+    shape = DistributedShape::onSingleTile({values.size()}, 0);
   }
 
-  program.add(poplar::program::Execute(cs, di));
+  if (tileMapping.empty()) {
+    tileMapping = TileMapping::linearMappingWithShape(*shape);
+  }
 
-  return casted;
+  if (!tileMapping.isCompatibleWithShape(*shape))
+    throw std::invalid_argument("Tile mapping is not compatible with shape");
+
+  poplar::Tensor constant = graph.addConstant(
+      Traits<Type>::PoplarType, this->tensor().shape(), hostValueArrayRef);
+
+  graph.setTileMapping(constant, tileMapping.toPoplar());
+  graph.setTileMapping(this->tensor(), tileMapping.toPoplar());
+
+  Context::program().add(poplar::program::Copy(constant, this->tensor()));
 }
-template <DataType Type>
-template <typename DestType>
-Tensor<DestType> Tensor<Type>::cast() const
-  requires std::is_same_v<Type, float> && std::is_same_v<DestType, double>
-{
-  GRAPHENE_TRACEPOINT();
-  DebugInfo di("Value", DI_ARGS(tensor()));
 
+Tensor::Tensor(const poplar::Tensor tensor, TypeRef type)
+    : Expression(tensor, type) {
+  if (tensor.containsConstant())
+    throw std::runtime_error("Tensor must not contain constants");
+}
+
+Tensor::Tensor(const Expression expr) : Tensor(materializeExpression(expr)) {}
+
+Tensor &Tensor::operator=(const Expression &expr) {
+  // Materialize the expression into this tensor
+  materializeExpression(expr, *this);
+  return *this;
+}
+
+Tensor &Tensor::operator=(const Tensor &value) {
+  // Copy one tensor to another. This might be more effective than materializing
+  // the tensor into this tensor.
+  Context::program().add(poplar::program::Copy(value.tensor(), tensor()));
+  return *this;
+}
+
+Tensor::Tensor(const Tensor &value)
+    : Tensor(Context::graph().clone(value.tensor()), value.type()) {
+  // Use the assignment operator to copy the tensor
+  *this = value;
+}
+
+Tensor Tensor::same() const { return Tensor::fromPoplar(tensor(), type()); }
+
+detail::InputExpr &Tensor::base() const {
+  detail::InputExpr *inputExpr =
+      dynamic_cast<detail::InputExpr *>(&Expression::base());
+  assert(inputExpr);
+  return *inputExpr;
+}
+
+poplar::Tensor Tensor::tensor(bool flattenIfScalar) const {
+  poplar::Tensor tensor = base().tensor();
+  if (flattenIfScalar && tensor.numElements() == 1) return tensor.flatten()[0];
+  return tensor;
+}
+
+poplar::Tensor Tensor::tensorOnTile(size_t tile, bool flattenIfScalar) const {
+  // If the first dimension is 1, the tensor is broadcasted to all tiles
+  if (this->shape()[0] == 1) {
+    return tensor(flattenIfScalar);
+  }
+
+  // If the tensor is neither broadcasted nor mapped to the tile, return an
+  // empty tensor
+  if (tileMapping()[tile].empty()) return poplar::Tensor();
+
+  poplar::Tensor tensor =
+      sliceTensorToTile(this->tensor(), tile, tileMapping());
+
+  if (flattenIfScalar && tensor.numElements() == 1) return tensor.flatten();
+  return tensor;
+}
+
+Tensor Tensor::rearrange(DistributedShape targetShape,
+                         TileMapping tileMapping) const {
+  if (shape().globalShape() != targetShape.globalShape())
+    throw std::runtime_error(
+        "Cannot rearrange tensor to shape with different shape");
+
+  if (tileMapping.empty())
+    tileMapping = TileMapping::linearMappingWithShape(targetShape);
+
+  Tensor rearranged = Tensor::uninitialized(type(), targetShape, tileMapping);
+  Context::program().add(poplar::program::Copy(tensor(), rearranged.tensor()));
+  return rearranged;
+}
+
+namespace {
+/// Recursively print the values of a tensor. The offset is the index of the
+/// first element of the given dimension, in number of elements (not number of
+/// bytes)
+void printTensorRecursive(std::ostream &stream, const uint8_t *data,
+                          TypeRef type, const DistributedShape &shape,
+                          size_t dim, size_t offset, std::string indent = "") {
+  // If we are at the last dimension, print the values
+  if (dim == shape.rank() - 1) {
+    stream << indent << "[";
+    for (size_t i = 0; i < shape[dim]; ++i) {
+      if (i > 0) stream << ", ";
+      size_t byteOffset = (offset + i) * type->size();
+      type->prettyPrintValue(data + byteOffset, stream);
+    }
+    stream << "]";
+    return;
+  }
+
+  // If we are not at the last dimension, print the values of the next dimension
+  stream << indent << "[" << std::endl;
+  for (size_t i = 0; i < shape[dim]; ++i) {
+    if (i > 0) stream << "\n";
+    size_t subOffset = offset + i * shape.stride(dim);
+    printTensorRecursive(stream, data, type, shape, dim + 1, subOffset,
+                         indent + "  ");
+  }
+  stream << std::endl << indent << "]";
+}
+}  // namespace
+
+void Tensor::print(std::string name, poplar::PrintTensorFmt fmt,
+                   std::ostream &stream) const {
+  DebugInfo di("Tensor", DI_ARGS(name));
+  if (name.empty()) name = "<unnamed>";
+
+  // Use a custom print function instead of program::PrintTensor to support
+  // non-native types (e.g., doubleword)
+  auto &runtime = Runtime::instance();
   auto &graph = Context::graph();
   auto &program = Context::program();
 
-  Tensor<double> casted(this->shape(), this->tileMapping());
+  std::string handle = runtime.registerHandle("PrintTensor");
+  poplar::Type poplarType = type()->poplarEquivalentType()->poplarType();
+  size_t numElementsToPrint = tensor().numElements();
 
-  poplar::ComputeSet cs = graph.addComputeSet(di);
-  for (size_t tile = 0; tile < tileMapping().size(); ++tile) {
-    if (tileMapping()[tile].empty()) continue;
+  auto func =
+      graph.addHostFunction(handle, {{poplarType, numElementsToPrint}}, {});
 
-    // FIXME: Use flattenToVector
-    poplar::Tensor tileTensor = tensorOnTile(tile).flatten();
-    poplar::Tensor castedTileTensor = casted.tensorOnTile(tile).flatten();
+  runtime.registerHostFunction(
+      handle, [shape = shape(), name = name, type = type(), &stream](
+                  poplar::ArrayRef<const void *> ins,
+                  poplar::ArrayRef<void *> /*outs*/) {
+        stream << "tensor<" << shape.str() << "x" << type->str() << "> " << name
+               << " = ";
+        printTensorRecursive(stream, reinterpret_cast<const uint8_t *>(ins[0]),
+                             type, shape, 0, 0, "");
+        stream << std::endl;
+      });
 
-    std::string codeletName = poputil::templateVertex(
-        "graphene::ops::CastFloatToDoublePrecisionVertex");
-    poplar::VertexRef v = graph.addVertex(cs, codeletName);
+  program.add(poplar::program::Call(func, {tensor()}, {}, di));
+}
 
-    graph.connect(v["in"], tileTensor);
-    graph.connect(v["out"], castedTileTensor);
-    graph.setPerfEstimate(v, tileTensor.numElements() * 3 + 100);
-    graph.setTileMapping(v, tile);
+void Tensor::copyToHost(
+    std::function<void(const HostTensor &tensor)> callback) const {
+  GRAPHENE_TRACEPOINT();
+  DebugInfo di("Tensor", DI_ARGS(tensor()));
+
+  auto &runtime = Runtime::instance();
+  auto &graph = Context::graph();
+  auto &program = Context::program();
+
+  std::string handle = runtime.registerHandle("CopyToHost");
+  poplar::Type poplarType = type()->poplarEquivalentType()->poplarType();
+
+  auto func = graph.addHostFunction(handle, {{poplarType, numElements()}}, {});
+
+  runtime.registerHostFunction(
+      handle,
+      [callback = callback, shape = shape(), tileMapping = tileMapping(),
+       type = type(),
+       name = tensor().getDebugStr()](poplar::ArrayRef<const void *> ins,
+                                      poplar::ArrayRef<void *> /*outs*/) {
+        HostTensor tensor = HostTensor::createTemporary(
+            const_cast<void *>(ins[0]), shape, tileMapping, name, type);
+        callback(tensor);
+      });
+
+  program.add(poplar::program::Call(func, {tensor()}, {}, di));
+}
+
+RemoteTensor Tensor::copyToRemote() const {
+  GRAPHENE_TRACEPOINT();
+  DebugInfo di("Tensor", DI_ARGS(tensor()));
+
+  std::unordered_map<size_t, poplar::RemoteBuffer> buffers;
+  TileMapping ipuMapping = tileMapping().translateToIPUMapping(
+      Context::graph().getTarget().getTilesPerIPU());
+
+  size_t numIPUs = ipuMapping.maxTile() + 1;
+  for (size_t ipu = 0; ipu < numIPUs; ++ipu) {
+    size_t numElements = ipuMapping.numElementsOnTile(ipu);
+    if (numElements == 0) continue;
+
+    std::string handle = Runtime::instance().registerHandle(
+        "hostToRemote_ipu" + std::to_string(ipu));
+    poplar::RemoteBuffer buffer = Context::graph().addRemoteBuffer(
+        handle, type()->poplarEquivalentType()->poplarType(), numElements);
+    buffers[ipu] = buffer;
+    Context::program().add(poplar::program::Copy(
+        sliceTensorToIPU(tensor(), ipu, tileMapping()), buffer, di));
   }
 
-  program.add(poplar::program::Execute(cs, di));
+  return RemoteTensor(type(), buffers, tileMapping(), shape(),
+                      tensor().getDebugStr());
+}
 
-  return casted;
+Expression Tensor::norm(VectorNorm type) const {
+  GRAPHENE_TRACEPOINT();
+  DebugInfo di("Tensor", DI_ARGS(tensor()));
+
+  switch (type) {
+    case VectorNorm::L1:
+      return reduce(0, ReduceOperation::ADD);
+    case VectorNorm::L2:
+      return ops::Sqrt(reduce(0, ReduceOperation::SQUARE_ADD));
+    case VectorNorm::LINF:
+      return reduce(0, ReduceOperation::MAX);
+    default:
+      throw std::runtime_error("Invalid vector norm");
+  }
 }
 
 // Explicit instantiation
-#define INSTANTIATE(T) template class Tensor<T>;
+#define INSTANTIATE(T)                                                  \
+  template Tensor::Tensor(std::initializer_list<T>,                     \
+                          std::optional<DistributedShape>, TileMapping, \
+                          std::string);
 
 INSTANTIATE(float)
 INSTANTIATE(double)
@@ -443,17 +362,6 @@ INSTANTIATE(uint16_t)
 INSTANTIATE(int16_t)
 INSTANTIATE(uint32_t)
 INSTANTIATE(int32_t)
-#undef INSTANTIATE
-
-// Instantiate the cast methods from double to float and vice versa
-#define INSTANTIATE(T, U) template Tensor<U> Tensor<T>::cast<U>() const;
-
-INSTANTIATE(doubleword, float)
-INSTANTIATE(float, doubleword)
-
-INSTANTIATE(double, float)
-INSTANTIATE(float, double)
-
 #undef INSTANTIATE
 
 }  // namespace graphene

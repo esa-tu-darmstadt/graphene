@@ -1,24 +1,26 @@
 #pragma once
 
+#include "libgraphene/common/Shape.hpp"
 #include "libgraphene/matrix/MatrixFormat.hpp"
 #include "libgraphene/matrix/host/details/HostMatrixBase.hpp"
-#include "libgraphene/matrix/host/details/MatrixMarket.hpp"
+
 namespace graphene::matrix::host {
 /** Represents a matrix in host memory. */
-template <DataType Type>
+
 class HostMatrix {
-  std::shared_ptr<HostMatrixBase<Type>> pimpl;
+  std::shared_ptr<HostMatrixBase> pimpl;
 
  public:
   HostMatrix() = default;
 
+  template <DataType Type>
   HostMatrix(MatrixFormat format, TripletMatrix<Type> tripletMatrix,
              size_t numTiles, std::string name = "matrix");
 
   template <typename Impl>
   HostMatrix(std::shared_ptr<Impl> impl) : pimpl(std::move(impl)) {}
 
-  template <typename T = HostMatrixBase<Type>>
+  template <typename T = HostMatrixBase>
   const T &getImpl() const {
     return static_cast<T &>(*pimpl);
   }
@@ -29,43 +31,49 @@ class HostMatrix {
     return pimpl->getTileLayout(proci);
   }
 
-  matrix::Matrix<Type> copyToTile() const { return pimpl->copyToTile(); }
+  matrix::Matrix copyToTile() const;
 
-  std::tuple<poplar::Graph::TileToTensorMapping, std::vector<size_t>>
-  getVectorTileMappingAndShape(bool withHalo = false) const {
-    return pimpl->getVectorTileMappingAndShape(withHalo);
+  /// Returns the distributed shape of a vector that is compatible with the
+  /// matrix. The vector can include or exclude halo cells based on the
+  /// withHalo parameter. The width parameter specifies the number of elements
+  /// per row in the vector. If width is 0, the resulting shape will be rank 1.
+  /// If width is greater than 0, the resulting shape will be rank 2, with the
+  /// second dimension having the specified width.
+  DistributedShape getVectorShape(bool withHalo = false,
+                                  size_t width = 0) const {
+    return pimpl->getVectorShape(withHalo, width);
   }
 
   MatrixFormat getFormat() const { return pimpl->getFormat(); }
   size_t numTiles() const { return pimpl->numTiles(); }
 
-  HostTensor<Type> loadVectorFromFile(std::string fileName,
-                                      bool withHalo = false,
-                                      std::string name = "vector") const {
-    return pimpl->loadVectorFromFile(fileName, withHalo, name);
+  /// Loads a vector from a file, and decomposes it into a \ref HostTensor with
+  /// the given data type.
+  HostTensor loadVectorFromFile(TypeRef type, std::string fileName,
+                                bool withHalo = false,
+                                std::string name = "vector") const {
+    return pimpl->loadVectorFromFile(type, fileName, withHalo, name);
   }
 
-  HostTensor<Type> decomposeVector(const std::vector<Type> &vector,
-                                   bool includeHaloCells,
-                                   std::string name = "vector") const {
-    return pimpl->decomposeVector(vector, includeHaloCells, name);
+  /// Decomposes a vector into a \ref HostTensor with the given data type
+  /// according to the tile layout of the matrix.
+  template <DataType Type>
+  HostTensor decomposeVector(const std::span<Type> &vector,
+                             bool includeHaloCells,
+                             TypeRef destType = getType<Type>(),
+                             std::string name = "vector") const {
+    return pimpl->decomposeVector(vector, includeHaloCells, destType, name);
   }
 };
 
-template <DataType Type>
-HostMatrix<Type> loadMatrixFromFile(std::filesystem::path path, size_t numTiles,
-                                    MatrixFormat format = MatrixFormat::CRS,
-                                    std::string name = "matrix");
+HostMatrix loadMatrixFromFile(TypeRef type, std::filesystem::path path,
+                              size_t numTiles,
+                              MatrixFormat format = MatrixFormat::CRS,
+                              std::string name = "matrix");
 
-template <DataType Type>
-HostTensor<Type> loadVectorFromFile(std::filesystem::path path,
-                                    const HostMatrix<Type> &matrix,
-                                    bool withHalo = false,
-                                    std::string name = "vector");
-
-template <DataType Type>
-HostMatrix<Type> generate3DPoissonMatrix(
-    size_t nx, size_t ny, size_t nz, size_t numTiles,
-    MatrixFormat format = MatrixFormat::CRS, std::string name = "poisson");
+HostMatrix generate3DPoissonMatrix(TypeRef type, size_t nx, size_t ny,
+                                   size_t nz, size_t numTiles,
+                                   MatrixFormat format = MatrixFormat::CRS,
+                                   std::string name = "poisson");
 
 }  // namespace graphene::matrix::host

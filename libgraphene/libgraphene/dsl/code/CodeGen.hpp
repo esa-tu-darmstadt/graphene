@@ -39,6 +39,10 @@ class CodeGen {
 
   static void emitCode(std::string code) { stream() << code; }
 
+  static void emitSingleLineComment(std::string comment) {
+    stream() << "// " << comment << "\n";
+  }
+
   static void emitStatement(std::string code) {
     emitCode(code);
     emitEndStatement();
@@ -50,7 +54,9 @@ class CodeGen {
   static void emitEndStatement() { stream() << ";\n"; }
 
   static std::string emitVariableDeclaration(TypeRef type, std::string name,
+                                             bool isConst,
                                              std::string value = "") {
+    if (isConst) stream() << "const ";
     emitType(type);
     stream() << " " << name;
     if (!value.empty()) stream() << " = " << value;

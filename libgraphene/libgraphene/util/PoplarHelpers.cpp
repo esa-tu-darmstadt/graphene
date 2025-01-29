@@ -3,36 +3,18 @@
 #include <optional>
 #include <poplar/Interval.hpp>
 
+#include "libgraphene/common/TileMapping.hpp"
 #include "libgraphene/util/Context.hpp"
 
 namespace graphene {
 
-std::vector<poplar::Interval> calculateIPUIntervals(
-    const poplar::Graph::TileToTensorMapping &tileMapping) {
-  size_t tilesPerIPU = Context::graph().getTarget().getTilesPerIPU();
-
-  std::vector<poplar::Interval> intervals;
-  size_t currentElement = 0;
-  for (size_t tile = 0; tile < tileMapping.size(); ++tile) {
-    size_t ipu = tile / tilesPerIPU;
-    if (ipu >= intervals.size()) {
-      intervals.emplace_back(currentElement, currentElement);
-    }
-    for (size_t i = 0; i < tileMapping[tile].size(); i++) {
-      currentElement += tileMapping[tile][i].size();
-    }
-    intervals[ipu] = poplar::Interval(intervals[ipu].begin(), currentElement);
-  }
-  return intervals;
-}
-
-std::vector<size_t> getCoordinateFromElementIndex(
-    const std::vector<size_t> &shape, size_t elementIndex) {
-  std::vector<size_t> coordinates(shape.size());
+std::vector<size_t> getCoordinateFromElementIndex(const DistributedShape &shape,
+                                                  size_t elementIndex) {
+  std::vector<size_t> coordinates(shape.rank());
   size_t remainingElements = elementIndex;
-  for (size_t dim = 0; dim < shape.size(); ++dim) {
+  for (size_t dim = 0; dim < shape.rank(); ++dim) {
     size_t dimSize = shape[dim];
-    coordinates[shape.size() - dim - 1] = remainingElements % dimSize;
+    coordinates[shape.rank() - dim - 1] = remainingElements % dimSize;
     remainingElements /= dimSize;
 
     if (remainingElements == 0) {
@@ -42,73 +24,45 @@ std::vector<size_t> getCoordinateFromElementIndex(
   return coordinates;
 }
 
-poplar::Tensor sliceTensorToIPU(poplar::Tensor tensor, size_t ipu) {
-  auto ipuIntervals =
-      calculateIPUIntervals(Context::graph().getTileMapping(tensor));
+poplar::Tensor sliceTensorToIPU(poplar::Tensor tensor, size_t ipu,
+                                const TileMapping &tileMapping) {
+  DistributedShape shape =
+      DistributedShape::fromPoplar(tensor.shape(), tileMapping.toPoplar());
 
-  // The stride is the product of all dimensions except the first one
-  size_t stride = 1;
-  std::vector<size_t> shape = tensor.shape();
+  // The first dimension is broadcasted to all IPUs
+  if (shape[0] == 1) return tensor;
 
-  // Zero-dimensional tensors cannot be sliced
-  if (shape.empty()) return ipu == 0 ? tensor : poplar::Tensor();
-
-  if (shape.size() > 1)
-    stride = std::accumulate(++shape.begin(), shape.end(), 1,
-                             std::multiplies<size_t>());
-
-  size_t startElements = ipuIntervals[ipu].begin();
-  size_t endElements = ipuIntervals[ipu].end();
-
-  assert(startElements % stride == 0 &&
-         "Tensor can only be partitioned to multiple IPUs along the first "
-         "dimension");
-  assert(endElements % stride == 0 &&
-         "Tensor can only be partitioned to multiple IPUs along the first "
-         "dimension");
-
-  size_t startIndex = startElements / stride;
-  size_t endIndex = endElements / stride;
-
-  return tensor.slice(startIndex, endIndex);
+  const size_t numTilesPerIPU = Context::graph().getTarget().getTilesPerIPU();
+  TileMapping ipuMapping = tileMapping.translateToIPUMapping(numTilesPerIPU);
+  return sliceTensorToTile(tensor, ipu, ipuMapping);
 }
 
-poplar::Tensor sliceTensorToTile(
-    poplar::Tensor tensor, size_t tile,
-    const poplar::Graph::TileToTensorMapping *mapping) {
-  std::optional<poplar::Graph::TileToTensorMapping> queriedMapping;
-  if (mapping == nullptr) {
-    queriedMapping = Context::graph().getTileMapping(tensor);
-    mapping = &queriedMapping.value();
-  }
+poplar::Tensor sliceTensorToTile(poplar::Tensor tensor, size_t tile,
+                                 const TileMapping &tileMapping) {
+  DistributedShape shape =
+      DistributedShape::fromPoplar(tensor.shape(), tileMapping.toPoplar());
 
-  auto intervals = (*mapping)[tile];
-  if (intervals.size() > 1)
+  // The first dimension is broadcasted to all tiles
+  if (shape[0] == 1) return tensor;
+
+  auto intervalsOnTile = tileMapping[tile];
+  if (intervalsOnTile.size() > 1)
     throw std::runtime_error(
         "This function currently only supports tensors with at most a single "
         "interval per tile");
-  if (intervals.size() == 0) return poplar::Tensor();
-  poplar::Interval interval = intervals[0];
+  if (intervalsOnTile.size() == 0) return {};
 
-  // The stride is the product of all dimensions except the first one
-  size_t stride = 1;
-  std::vector<size_t> shape = tensor.shape();
+  MappedInterval interval = *intervalsOnTile.begin();
+  size_t stride = shape.stride(0);
 
-  // Zero-dimensional tensors cannot be sliced
-  if (shape.empty()) return tile == 0 ? tensor : poplar::Tensor();
-
-  if (shape.size() > 1)
-    stride = std::accumulate(++shape.begin(), shape.end(), 1,
-                             std::multiplies<size_t>());
-
-  assert(interval.begin() % stride == 0 &&
-         "Tensor can only be partitioned to multiple IPUs along the first "
+  assert(interval.start() % stride == 0 &&
+         "Tensor can only be partitioned to multiple tiles along the first "
          "dimension");
   assert(interval.end() % stride == 0 &&
-         "Tensor can only be partitioned to multiple IPUs along the first "
+         "Tensor can only be partitioned to multiple tiles along the first "
          "dimension");
 
-  size_t startIndex = interval.begin() / stride;
+  size_t startIndex = interval.start() / stride;
   size_t endIndex = interval.end() / stride;
 
   return tensor.slice(startIndex, endIndex);

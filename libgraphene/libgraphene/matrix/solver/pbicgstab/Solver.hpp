@@ -8,15 +8,14 @@
 #include "libgraphene/matrix/solver/pbicgstab/Configuration.hpp"
 
 namespace graphene::matrix::solver::pbicgstab {
-template <DataType Type>
-class Solver : public solver::Solver<Type> {
+class Solver : public solver::Solver {
   std::shared_ptr<Configuration> config_;
-  std::shared_ptr<solver::Solver<Type>> preconditioner_;
+  std::shared_ptr<solver::Solver> preconditioner_;
 
  public:
-  Solver(const Matrix<Type>& matrix, std::shared_ptr<Configuration> config);
+  Solver(const Matrix& matrix, std::shared_ptr<Configuration> config);
 
-  SolverStats solve(Tensor<Type>& x, Tensor<Type>& b) override;
+  SolverStats solve(Tensor& x, Tensor& b) override;
 
   std::string name() const override {
     if (preconditioner_) {

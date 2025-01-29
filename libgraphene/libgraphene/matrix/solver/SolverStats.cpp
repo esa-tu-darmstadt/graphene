@@ -2,6 +2,8 @@
 
 #include <spdlog/spdlog.h>
 
+#include <poplar/Type.hpp>
+
 #include "libgraphene/dsl/tensor/Operators.hpp"
 #include "libgraphene/matrix/Norm.hpp"
 #include "libgraphene/util/Context.hpp"
@@ -35,7 +37,7 @@ void SolverStats::checkConvergence(float absTolerance, float relTolerance,
   }
 }
 
-void SolverStats::checkSingularity(Tensor<float> wApA, float tolerance) {
+void SolverStats::checkSingularity(Tensor wApA, float tolerance) {
   GRAPHENE_TRACEPOINT();
   DebugInfo di("SolverStats");
 
@@ -51,14 +53,15 @@ void SolverStats::print() const {
 
   // Register custom print function
   std::string handle = runtime.registerHandle("PrintSolverStats");
-  auto func = graph.addHostFunction(handle,
-                                    {/* initialResidual */ {poplar::FLOAT, 1},
-                                     /* finalResidual */ {poplar::FLOAT, 1},
-                                     /* norm factor */ {poplar::FLOAT, 1},
-                                     /* num interations*/ {poplar::INT, 1},
-                                     /* converged */ {poplar::BOOL, 1},
-                                     /* singular */ {poplar::BOOL, 1}},
-                                    {});
+  auto func =
+      graph.addHostFunction(handle,
+                            {/* initialResidual */ {poplar::FLOAT, 1},
+                             /* finalResidual */ {poplar::FLOAT, 1},
+                             /* norm factor */ {poplar::FLOAT, 1},
+                             /* num interations*/ {poplar::UNSIGNED_INT, 1},
+                             /* converged */ {poplar::BOOL, 1},
+                             /* singular */ {poplar::BOOL, 1}},
+                            {});
 
   // Capture the values we want to print by value  because this
   // SolverPerformance object will be destroyed when the host function is called

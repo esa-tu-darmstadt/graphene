@@ -1,5 +1,6 @@
 #pragma once
 
+#include <functional>
 #include <poplar/Tensor.hpp>
 
 #include "libgraphene/common/Type.hpp"
@@ -10,28 +11,54 @@ namespace graphene {
 
 enum class VertexDirection : size_t { Input = 0, Output, InOut };
 
-template <typename F, typename... Args>
-void Execute(std::tuple<Tensor<Args>&...> tensors,
-             std::vector<VertexDirection> directions, F code) {
-  std::vector<poplar::Tensor> poplarTensors;
-  poplarTensors.reserve(sizeof...(Args));
-  std::apply(
-      [&](auto&... args) { (poplarTensors.push_back(args.tensor()), ...); },
-      tensors);
+namespace details {
+/// A small helper struct that carries both the Tensor reference and its
+/// direction.
+struct DirectionedTensor {
+  std::reference_wrapper<const Tensor> tensor;
+  VertexDirection dir;
+};
 
-  std::vector<TypeRef> tensorTypes;
-  tensorTypes.reserve(sizeof...(Args));
-  std::apply([&](auto&... args) { (tensorTypes.push_back(args.type()), ...); },
-             tensors);
-
-  std::vector<codedsl::VertexInOutType::Direction> directionsConverted;
-  directionsConverted.reserve(directions.size());
-  for (const auto& direction : directions) {
-    directionsConverted.push_back(
-        static_cast<codedsl::VertexInOutType::Direction>(direction));
-  }
-
-  codedsl::ExecuteAsMapped(poplarTensors, tensorTypes, directionsConverted,
-                           code);
+}  // namespace details
+/// Helper functions to build a DirectionedTensor object with the given
+/// direction.
+inline details::DirectionedTensor In(const Tensor& tensor) {
+  return {std::ref(tensor), VertexDirection::Input};
 }
+inline details::DirectionedTensor Out(Tensor& tensor) {
+  return {std::ref(tensor), VertexDirection::Output};
+}
+inline details::DirectionedTensor InOut(Tensor& tensor) {
+  return {std::ref(tensor), VertexDirection::InOut};
+}
+
+template <typename F, typename... DirTensors>
+void Execute(F&& code, DirTensors&&... dts) {
+  // Collect poplar::Tensor and TypeRef
+  std::vector<poplar::Tensor> poplarTensors = {dts.tensor.get().tensor()...};
+  std::vector<TypeRef> tensorTypes = {dts.tensor.get().type()...};
+
+  // Collect directions
+  std::vector<codedsl::VertexInOutType::Direction> directionsConverted = {
+      static_cast<codedsl::VertexInOutType::Direction>(dts.dir)...};
+  bool multiVertex = false;
+  codedsl::ExecuteAsMapped(poplarTensors, tensorTypes, directionsConverted,
+                           multiVertex, std::forward<F>(code));
+}
+
+/// The first argument of the code function will be the worker ID.
+template <typename F, typename... DirTensors>
+void ExecuteThreaded(F&& code, DirTensors&&... dts) {
+  // Collect poplar::Tensor and TypeRef
+  std::vector<poplar::Tensor> poplarTensors = {dts.tensor.get().tensor()...};
+  std::vector<TypeRef> tensorTypes = {dts.tensor.get().type()...};
+
+  // Collect directions
+  std::vector<codedsl::VertexInOutType::Direction> directionsConverted = {
+      static_cast<codedsl::VertexInOutType::Direction>(dts.dir)...};
+  bool multiVertex = true;
+  codedsl::ExecuteAsMapped(poplarTensors, tensorTypes, directionsConverted,
+                           multiVertex, std::forward<F>(code));
+}
+
 }  // namespace graphene

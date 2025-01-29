@@ -7,10 +7,11 @@
     "benchmark": "solve",
     "solver": {
         "type": "IterativeRefinement",
-        "relResidual": 1e-9,
+        // "relResidual": 1e-9,
         "maxIterations": 1000,
         "mixedPrecision": true,
         "printPerformanceAfterSolve": true,
+        "useDoubleWordArithmetic": true,
         "innerSolver": {
             "type": "PBiCGStab",
             "maxIterations": 100,

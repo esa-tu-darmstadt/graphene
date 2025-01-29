@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <poplar/ArrayRef.hpp>
 #include <poplar/Type.hpp>
+#include <variant>
 
 #include "libgraphene/common/Concepts.hpp"
 #include "libtwofloat/algorithms.hpp"
@@ -87,14 +88,15 @@ struct Traits<bool> {
   static bool inline zero() { return false; }
   static bool inline one() { return true; }
   static constexpr poplar::Type &PoplarType = poplar::BOOL;
-  using PoplarHostType = bool;
+  // Bools are 8 bits long
+  using PoplarHostType = uint8_t;
 };
 
 template <PoplarNativeType Type>
 auto inline toPoplarHostType(Type val)
   requires PoplarNativeType<Type>
 {
-  return val;
+  return (Type)val;
 }
 
 auto inline toPoplarHostType(doubleword val) {
@@ -104,5 +106,9 @@ auto inline toPoplarHostType(doubleword val) {
 auto inline toPoplarHostType(double val) {
   return *reinterpret_cast<long long *>(&val);
 }
+
+using PoplarDataTypeVariant =
+    std::variant<bool, uint8_t, int8_t, uint16_t, int16_t, uint32_t, int32_t,
+                 uint64_t, int64_t, float>;
 
 }  // namespace graphene

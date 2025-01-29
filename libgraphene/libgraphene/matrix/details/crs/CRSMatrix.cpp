@@ -8,176 +8,103 @@
 #include <poputil/VertexTemplates.hpp>
 #include <type_traits>
 
+#include "libgraphene/common/Shape.hpp"
+#include "libgraphene/common/TileMapping.hpp"
+#include "libgraphene/dsl/code/Operators.hpp"
+#include "libgraphene/dsl/common/details/Expressions.hpp"
+#include "libgraphene/dsl/tensor/Execute.hpp"
 #include "libgraphene/dsl/tensor/Operators.hpp"
+#include "libgraphene/dsl/tensor/Tensor.hpp"
 #include "libgraphene/util/Context.hpp"
 #include "libgraphene/util/DebugInfo.hpp"
 #include "libgraphene/util/PoplarHelpers.hpp"
 
 namespace graphene::matrix::crs {
-template <DataType Type>
-Tensor<Type> CRSMatrix<Type>::operator*(Tensor<Type> &x) const {
+Tensor CRSMatrix::spmv(Tensor &x, TypeRef destType, TypeRef intermediateType,
+                       bool withHalo) const {
   DebugInfo di("CRSMatrix");
-  auto &graph = Context::graph();
-
   // Make sure that x contains halo cells.
-  if (!this->isVectorCompatible(x, true, false)) {
+  if (!this->isVectorCompatible(x, true)) {
     throw std::runtime_error(
-        "x must be a vector with halo cells compatible with the matrix");
+        "shape of vector is incompatible with the matrix layout");
   }
+
+  if (!destType) destType = x.type();
 
   this->exchangeHaloCells(x);
 
-  poplar::ComputeSet cs = graph.addComputeSet(di);
-
   // Create an uninitialized tensor for the result with the correct shape
-  bool resultWithHalo = false;
-  auto [resultMapping, resultShape] =
-      this->hostMatrix.getVectorTileMappingAndShape(resultWithHalo);
-  Tensor<Type> result(resultShape, resultMapping);
+  DistributedShape resultShape = this->hostMatrix.getVectorShape(withHalo);
+  Tensor result = Tensor::uninitialized(
+      destType, resultShape, TileMapping::linearMappingWithShape(resultShape),
+      "spmv");
 
-  // The expected tile mapping of the input tensor
-  auto [mappingWithHalo, shapeWithHalo] =
-      this->hostMatrix.getVectorTileMappingAndShape(true);
+  using namespace codedsl;
+  ExecuteThreaded(
+      [destType, intermediateType](Value workerID, Value x, Value rowPtr,
+                                   Value colInd, Value diag, Value offDiag,
+                                   Value res) {
+        // For each row in the matrix
+        For(workerID, rowPtr.size() - 1, getNumWorkerThreadsPerTile(),
+            [&](Value i) {
+              Variable sum =
+                  diag[i].cast(destType) * x[i].cast(intermediateType);
+              // For each non-diagonal element in the row
+              For(rowPtr[i], rowPtr[i + 1], 1, [&](Value j) {
+                sum += offDiag[j].cast(intermediateType) *
+                       x[colInd[j]].cast(intermediateType);
+              });
+              res[i] = sum.cast(destType);
+            });
+      },
+      In(x), In(addressing->rowPtr), In(addressing->colInd),
+      In(diagonalCoefficients), In(offDiagonalCoefficients), Out(result));
 
-  for (size_t tile = 0; tile < resultMapping.size(); ++tile) {
-    if (resultMapping[tile].empty()) continue;
-
-    // Slice the input tensors according to our tile layout. If this layout does
-    // not match the tile mapping of the input, poplar will automatically
-    // rearrange the data.
-    poplar::Tensor xTile =
-        sliceTensorToTile(x.tensor(), tile, &mappingWithHalo);
-    poplar::Tensor rowPtrTile = addressing->rowPtr.tensorOnTile(tile);
-    poplar::Tensor colIndTile = addressing->colInd.tensorOnTile(tile);
-    poplar::Tensor diagCoeffsTile = diagonalCoefficients.tensorOnTile(tile);
-    poplar::Tensor offDiagCoeffsTile =
-        offDiagonalCoefficients.tensorOnTile(tile);
-    poplar::Tensor resultTile = result.tensorOnTile(tile);
-
-    // If there are no interior and seperator rows on this tile, we can skip
-    if (!diagCoeffsTile.valid()) continue;
-
-    // Choose the codelet based on the data types
-    std::string className = "graphene::matrix::crs::MatrixVectorMultiply";
-    std::string codeletName = poputil::templateVertex(
-        className, Traits<Type>::PoplarType, rowPtrTile.elementType(),
-        colIndTile.elementType());
-
-    auto vertex = graph.addVertex(cs, codeletName);
-    graph.setTileMapping(vertex, tile);
-    graph.connect(vertex["x"], xTile);
-    graph.connect(vertex["rowPtr"], rowPtrTile);
-    graph.connect(vertex["colInd"], colIndTile);
-    graph.connect(vertex["diagCoeffs"], diagCoeffsTile);
-    graph.connect(vertex["offDiagCoeffs"], offDiagCoeffsTile);
-    graph.connect(vertex["result"], resultTile);
-
-    graph.setPerfEstimate(vertex, 100);
-  }
-  Context::program().add(poplar::program::Execute(cs, di));
   return result;
 }
 
-template <DataType Type>
-Tensor<Type> CRSMatrix<Type>::residual(Tensor<Type> &x, const Tensor<Type> &b,
-                                       bool withHalo) const {
-  return b - (*this) * x;
-}
-
-template <DataType Type, DataType ExtendedType>
-static Tensor<Type> mixedPrecisionResidual(const CRSMatrix<Type> &matrix,
-                                           Tensor<ExtendedType> &x,
-                                           const Tensor<Type> &b) {
+Tensor CRSMatrix::residual(Tensor &x, const Tensor &b, TypeRef destType,
+                           TypeRef intermediateType, bool withHalo) const {
   DebugInfo di("CRSMatrix");
-  auto &graph = Context::graph();
-
-  if (!matrix.isVectorCompatible(x, true, false)) {
+  // Make sure that x contains halo cells.
+  if (!this->isVectorCompatible(x, true)) {
     throw std::runtime_error(
-        "x must be a vector with halo cells compatible with the matrix");
-  }
-  if (!matrix.isVectorCompatible(b, true, false) &&
-      !matrix.isVectorCompatible(b, false, false)) {
-    throw std::runtime_error(
-        "b must be a vector with or without halo cells compatible with the "
-        "matrix");
+        "shape of vector is incompatible with the matrix layout");
   }
 
-  matrix.exchangeHaloCells(x);
+  if (!destType)
+    destType =
+        detail::inferType(detail::BinaryOpType::MULTIPLY, x.type(), b.type());
 
-  poplar::ComputeSet cs = graph.addComputeSet(di);
+  this->exchangeHaloCells(x);
 
   // Create an uninitialized tensor for the result with the correct shape
-  bool resultWithHalo = false;
-  auto [resultMapping, resultShape] =
-      matrix.hostMatrix.getVectorTileMappingAndShape(resultWithHalo);
-  Tensor<Type> result(resultShape, resultMapping);
+  DistributedShape resultShape = this->hostMatrix.getVectorShape(withHalo);
+  Tensor result = Tensor::uninitialized(
+      destType, resultShape, TileMapping::linearMappingWithShape(resultShape),
+      "spmv");
 
-  // The expected tile mapping of x
-  auto [xMapping, xShape] =
-      matrix.hostMatrix.getVectorTileMappingAndShape(true);
+  using namespace codedsl;
+  ExecuteThreaded(
+      [destType, intermediateType](Value workerID, Value x, Value b,
+                                   Value rowPtr, Value colInd, Value diag,
+                                   Value offDiag, Value res) {
+        // For each row in the matrix
+        For(workerID, rowPtr.size() - 1, getNumWorkerThreadsPerTile(),
+            [&](Value i) {
+              Variable sum =
+                  diag[i].cast(intermediateType) * x[i].cast(intermediateType);
+              // For each non-diagonal element in the row
+              For(rowPtr[i], rowPtr[i + 1], 1, [&](Value j) {
+                sum += offDiag[j].cast(intermediateType) *
+                       x[colInd[j]].cast(intermediateType);
+              });
+              res[i] = (b[i].cast(intermediateType) - sum).cast(destType);
+            });
+      },
+      In(x), In(b), In(addressing->rowPtr), In(addressing->colInd),
+      In(diagonalCoefficients), In(offDiagonalCoefficients), Out(result));
 
-  // The expected tile mapping of b
-  auto [bMapping, bShape] =
-      matrix.hostMatrix.getVectorTileMappingAndShape(false);
-  for (size_t tile = 0; tile < resultMapping.size(); ++tile) {
-    if (resultMapping[tile].empty()) continue;
-
-    // Slice the input tensors according to our tile layout. If this layout does
-    // not match the tile mapping of the input, poplar will automatically
-    // rearrange the data.
-    poplar::Tensor xTile = sliceTensorToTile(x.tensor(), tile, &xMapping);
-    poplar::Tensor bTile = sliceTensorToTile(b.tensor(), tile, &bMapping);
-
-    poplar::Tensor rowPtrTile = matrix.addressing->rowPtr.tensorOnTile(tile);
-    poplar::Tensor colIndTile = matrix.addressing->colInd.tensorOnTile(tile);
-    poplar::Tensor diagCoeffsTile =
-        matrix.diagonalCoefficients.tensorOnTile(tile);
-    poplar::Tensor offDiagCoeffsTile =
-        matrix.offDiagonalCoefficients.tensorOnTile(tile);
-    poplar::Tensor resultTile = result.tensorOnTile(tile);
-
-    // Choose the codelet based on the data types
-    std::string className = "graphene::matrix::crs::ResidualMixedPrecision";
-    if (std::is_same_v<Type, float> &&
-        std::is_same_v<ExtendedType, doubleword>) {
-      className += "DoublewordToFloat";
-    } else if (std::is_same_v<Type, float> &&
-               std::is_same_v<ExtendedType, double>) {
-      className += "DoubleToFloat";
-    } else {
-      throw std::runtime_error("Invalid data types");
-    }
-    std::string codeletName = poputil::templateVertex(
-        className, rowPtrTile.elementType(), colIndTile.elementType());
-
-    auto vertex = graph.addVertex(cs, codeletName);
-    graph.setTileMapping(vertex, tile);
-    graph.connect(vertex["x"], xTile);
-    graph.connect(vertex["b"], bTile);
-    graph.connect(vertex["rowPtr"], rowPtrTile);
-    graph.connect(vertex["colInd"], colIndTile);
-    graph.connect(vertex["diagCoeffs"], diagCoeffsTile);
-    graph.connect(vertex["offDiagCoeffs"], offDiagCoeffsTile);
-    graph.connect(vertex["result"], resultTile);
-
-    graph.setPerfEstimate(vertex, 100);
-  }
-  Context::program().add(poplar::program::Execute(cs, di));
   return result;
 }
-
-template <>
-Tensor<float> CRSMatrix<float>::residual(Tensor<double> &x,
-                                         const Tensor<float> &b) const {
-  return mixedPrecisionResidual<float, double>(*this, x, b);
-}
-
-template <>
-Tensor<float> CRSMatrix<float>::residual(Tensor<doubleword> &x,
-                                         const Tensor<float> &b) const {
-  return mixedPrecisionResidual<float, doubleword>(*this, x, b);
-}
-
-// Template instantiations
-template class CRSMatrix<float>;
 }  // namespace graphene::matrix::crs

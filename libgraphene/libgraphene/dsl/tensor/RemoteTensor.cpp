@@ -2,6 +2,7 @@
 
 #include <poplar/DebugContext.hpp>
 
+#include "libgraphene/common/TileMapping.hpp"
 #include "libgraphene/common/Traits.hpp"
 #include "libgraphene/dsl/tensor/Tensor.hpp"
 #include "libgraphene/util/Context.hpp"
@@ -11,43 +12,31 @@
 
 namespace graphene {
 
-template <DataType Type>
-Tensor<Type> RemoteTensor<Type>::copyToTile() const {
+Tensor RemoteTensor::copyToTile() const {
   GRAPHENE_TRACEPOINT();
   DebugInfo di("RemoteValue");
   di.add("debugStr", debugStr_);
 
   poplar::Graph &graph = Context::graph();
-  poplar::Graph::TileToTensorMapping tileMapping = tileMapping_;
 
-  poplar::Tensor tensor =
-      graph.addVariable(Traits<Type>::PoplarType, shape_, debugStr_);
-  graph.setTileMapping(tensor, tileMapping);
+  poplar::Tensor tensor = graph.addVariable(
+      type_->poplarType(), shape_.globalShape().toPoplar(), debugStr_);
+  graph.setTileMapping(tensor, tileMapping_.toPoplar());
   di.addOutput(tensor);
 
-  auto ipuIntervals = calculateIPUIntervals(tileMapping);
+  TileMapping ipuMapping =
+      tileMapping_.translateToIPUMapping(graph.getTarget().getTilesPerIPU());
 
-  for (size_t ipu = 0; ipu < buffers_.size(); ++ipu) {
-    auto &buffer = buffers_[ipu];
-    poplar::Tensor ipuTensor = tensor.flatten().slice(ipuIntervals[ipu].begin(),
-                                                      ipuIntervals[ipu].end());
-    Context::program().add(poplar::program::Copy(buffer, ipuTensor, di));
+  size_t numIPUs = ipuMapping.maxTile() + 1;
+  for (size_t ipu = 0; ipu < numIPUs; ++ipu) {
+    size_t numElements = ipuMapping.numElementsOnTile(ipu);
+    if (numElements == 0) continue;
+
+    poplar::RemoteBuffer buffer = buffers_.at(ipu);
+    Context::program().add(poplar::program::Copy(
+        buffer, sliceTensorToIPU(tensor, ipu, tileMapping_), di));
   }
 
-  return Tensor<Type>(tensor);
+  return Tensor::fromPoplar(tensor, type_);
 }
-
-// Explicit instantiation
-#define INSTANTIATE(T) template class RemoteTensor<T>;
-
-INSTANTIATE(float)
-INSTANTIATE(bool)
-INSTANTIATE(uint8_t)
-INSTANTIATE(int8_t)
-INSTANTIATE(uint16_t)
-INSTANTIATE(int16_t)
-INSTANTIATE(uint32_t)
-INSTANTIATE(int32_t)
-
-#undef INSTANTIATE
 }  // namespace graphene

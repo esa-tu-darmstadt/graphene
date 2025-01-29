@@ -16,9 +16,9 @@ Configuration::Configuration(nlohmann::json const& config) {
   setFieldFromJSON<bool>(config, "printPerformanceEachIteration",
                          printPerformanceEachIteration);
   setFieldFromJSON<VectorNorm>(config, "norm", norm);
-  setFieldFromJSON<bool>(config, "mixedPrecision", mixedPrecision);
-  setFieldFromJSON<bool>(config, "useDoubleWordArithmetic",
-                         useDoubleWordArithmetic);
+
+  setFieldFromJSON<TypeRef>(config, "extendedPrecisionType",
+                            extendedPrecisionType);
 
   innerSolver = solver::Configuration::fromJSON(config["innerSolver"]);
 }

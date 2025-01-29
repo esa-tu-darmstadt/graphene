@@ -4,7 +4,9 @@
 
 #include <poputil/VertexTemplates.hpp>
 
+#include "libgraphene/dsl/code/Operators.hpp"
 #include "libgraphene/dsl/tensor/ControlFlow.hpp"
+#include "libgraphene/dsl/tensor/Execute.hpp"
 #include "libgraphene/dsl/tensor/Operators.hpp"
 #include "libgraphene/matrix/Matrix.hpp"
 #include "libgraphene/matrix/details/crs/CRSMatrix.hpp"
@@ -15,16 +17,14 @@
 
 namespace graphene::matrix::solver::gaussseidel {
 
-template <DataType Type>
-Solver<Type>::Solver(const Matrix<Type>& matrix,
-                     std::shared_ptr<const gaussseidel::Configuration> config)
-    : solver::Solver<Type>(matrix),
+Solver::Solver(const Matrix& matrix,
+               std::shared_ptr<const gaussseidel::Configuration> config)
+    : solver::Solver(matrix),
       config_(std::move(config)),
       solveMulticolor_(this->shouldUseMulticolor(config_->solveMulticolor)) {}
 
-template <DataType Type>
-void Solver<Type>::solveIterationCSR(Tensor<Type>& x, Tensor<Type>& b) const {
-  const auto& A = this->matrix().template getImpl<crs::CRSMatrix<Type>>();
+void Solver::solveIterationCSR(Tensor& x, Tensor& b) const {
+  const auto& A = this->matrix().getImpl<crs::CRSMatrix>();
   DebugInfo di("GaussSeidelSolver");
   auto& graph = Context::graph();
   auto& program = Context::program();
@@ -41,60 +41,32 @@ void Solver<Type>::solveIterationCSR(Tensor<Type>& x, Tensor<Type>& b) const {
 
   A.exchangeHaloCells(x);
 
-  poplar::ComputeSet cs = graph.addComputeSet(di);
+  TypeRef workingType = config_->workingType ? config_->workingType : x.type();
 
-  for (size_t tile = 0; tile < A.numTiles(); ++tile) {
-    poplar::Tensor xTile = x.tensorOnTile(tile);
-    poplar::Tensor bTile = b.tensorOnTile(tile);
-    poplar::Tensor rowPtrTile = A.addressing->rowPtr.tensorOnTile(tile);
-    poplar::Tensor colIndTile = A.addressing->colInd.tensorOnTile(tile);
-    poplar::Tensor diagCoeffsTile = A.diagonalCoefficients.tensorOnTile(tile);
-    poplar::Tensor offDiagCoeffsTile =
-        A.offDiagonalCoefficients.tensorOnTile(tile);
-    poplar::Tensor colorSortAddrTile, colorSortStartPtrTile;
-    if (solveMulticolor_) {
-      colorSortAddrTile =
-          A.addressing->coloring->colorSortAddr.tensorOnTile(tile);
-      colorSortStartPtrTile =
-          A.addressing->coloring->colorSortStartPtr.tensorOnTile(tile);
-    }
+  // FIXME: Solve multicolor
+  // FIXME: Use multiple worker threads
 
-    std::string codeletName =
-        "graphene::matrix::solver::gaussseidel::GausSeidelSolveSmoothCRS";
-    if (solveMulticolor_) {
-      codeletName += "Multicolor";
-      codeletName = poputil::templateVertex(
-          codeletName, Traits<Type>::PoplarType, rowPtrTile.elementType(),
-          colIndTile.elementType(), colorSortAddrTile.elementType(),
-          colorSortStartPtrTile.elementType());
-    } else {
-      codeletName = poputil::templateVertex(
-          codeletName, Traits<Type>::PoplarType, rowPtrTile.elementType(),
-          colIndTile.elementType());
-    }
-
-    auto vertex = graph.addVertex(cs, codeletName);
-    graph.setTileMapping(vertex, tile);
-    graph.connect(vertex["x"], xTile);
-    graph.connect(vertex["b"], bTile);
-    graph.connect(vertex["rowPtr"], rowPtrTile);
-    graph.connect(vertex["colInd"], colIndTile);
-    graph.connect(vertex["diagCoeffs"], diagCoeffsTile);
-    graph.connect(vertex["offDiagCoeffs"], offDiagCoeffsTile);
-    if (solveMulticolor_) {
-      graph.connect(vertex["colorSortAddr"], colorSortAddrTile);
-      graph.connect(vertex["colorSortStartAddr"], colorSortStartPtrTile);
-    }
-
-    graph.setPerfEstimate(vertex, 100);
-  }
-
-  program.add(poplar::program::Execute(cs, di));
+  using namespace codedsl;
+  Execute(
+      [workingType](Value x, Value b, Value rowPtr, Value colInd, Value diag,
+                    Value offDiag) {
+        // For each row in the matrix
+        For(0, rowPtr.size() - 1, 1, [&](Value i) {
+          Variable sum = diag[i].cast(workingType);
+          // For each non-diagonal element in the row
+          For(rowPtr[i], rowPtr[i + 1], 1, [&](Value j) {
+            sum -=
+                offDiag[j].cast(workingType) * x[colInd[j]].cast(workingType);
+          });
+          Value newX = (sum / diag[i].cast(workingType));
+          x[i] = newX.cast(x.type());
+        });
+      },
+      InOut(x), In(b), In(A.addressing->rowPtr), In(A.addressing->colInd),
+      In(A.diagonalCoefficients), In(A.offDiagonalCoefficients));
 }
 
-template <DataType Type>
-void gaussseidel::Solver<Type>::solveIteration(Tensor<Type>& x,
-                                               Tensor<Type>& b) const {
+void gaussseidel::Solver::solveIteration(Tensor& x, Tensor& b) const {
   switch (this->matrix().getFormat()) {
     case MatrixFormat::CRS:
       solveIterationCSR(x, b);
@@ -104,21 +76,21 @@ void gaussseidel::Solver<Type>::solveIteration(Tensor<Type>& x,
   }
 }
 
-template <DataType Type>
-SolverStats Solver<Type>::solve(Tensor<Type>& x, Tensor<Type>& b) {
+SolverStats Solver::solve(Tensor& x, Tensor& b) {
   GRAPHENE_TRACEPOINT();
   spdlog::trace("Solving with Gauss-Seidel");
 
   DebugInfo di("GaussSeidelSolver");
-  const Matrix<Type>& A = this->matrix();
+  const Matrix& A = this->matrix();
 
-  if (!A.isVectorCompatible(x, true, true))
+  if (!A.isVectorCompatible(x, true))
     throw std::runtime_error("x must be vector with halo cells.");
 
-  if (!A.isVectorCompatible(b, false, true))
+  if (!A.isVectorCompatible(b, false))
     throw std::runtime_error("b must be vector without halo cells.");
 
   auto& program = Context::program();
+  TypeRef workingType = config_->workingType ? config_->workingType : x.type();
 
   SolverStats stats(name(), config_->norm, A.numTiles());
 
@@ -139,7 +111,7 @@ SolverStats Solver<Type>::solve(Tensor<Type>& x, Tensor<Type>& b) {
     stats.bNorm = A.vectorNorm(config_->norm, b);
 
   // Calculate the initial residual
-  Tensor<Type> initialResidual = A.residual(x, b);
+  Tensor initialResidual = A.residual(x, b, workingType);
   stats.initialResidual = A.vectorNorm(config_->norm, initialResidual);
   stats.finalResidual = stats.initialResidual;
 
@@ -155,7 +127,7 @@ SolverStats Solver<Type>::solve(Tensor<Type>& x, Tensor<Type>& b) {
     });
 
     // Calculate the residual and check for convergence
-    auto currentResidual = A.residual(x, b);
+    auto currentResidual = A.residual(x, b, workingType);
     stats.finalResidual = A.vectorNorm(config_->norm, currentResidual);
     stats.checkConvergence(config_->absTolerance, config_->relTolerance,
                            config_->relResidual);
@@ -167,6 +139,4 @@ SolverStats Solver<Type>::solve(Tensor<Type>& x, Tensor<Type>& b) {
 
   return stats;
 }
-
-template class Solver<float>;
 }  // namespace graphene::matrix::solver::gaussseidel

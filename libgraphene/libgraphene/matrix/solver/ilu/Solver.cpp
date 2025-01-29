@@ -4,7 +4,9 @@
 
 #include <poputil/VertexTemplates.hpp>
 
+#include "libgraphene/dsl/code/Operators.hpp"
 #include "libgraphene/dsl/tensor/ControlFlow.hpp"
+#include "libgraphene/dsl/tensor/Execute.hpp"
 #include "libgraphene/dsl/tensor/Operators.hpp"
 #include "libgraphene/matrix/Matrix.hpp"
 #include "libgraphene/matrix/Norm.hpp"
@@ -16,10 +18,8 @@
 
 namespace graphene::matrix::solver::ilu {
 
-template <DataType Type>
-Solver<Type>::Solver(const Matrix<Type>& matrix,
-                     std::shared_ptr<Configuration> config)
-    : solver::Solver<Type>(matrix),
+Solver::Solver(const Matrix& matrix, std::shared_ptr<Configuration> config)
+    : solver::Solver(matrix),
       config_(config),
       solveMulticolor_(this->shouldUseMulticolor(config_->solveMulticolor)),
       factorizeMulticolor_(
@@ -27,101 +27,108 @@ Solver<Type>::Solver(const Matrix<Type>& matrix,
   factorize();
 }
 
-template <DataType Type>
-void Solver<Type>::factorizeCRS() {
-  const crs::CRSMatrix<Type>& A =
-      this->matrix().template getImpl<crs::CRSMatrix<Type>>();
+void Solver::factorizeCRS_ILU() {
+  const crs::CRSMatrix& A = this->matrix().template getImpl<crs::CRSMatrix>();
   GRAPHENE_TRACEPOINT();
   DebugInfo di("ILUSolver");
   auto& graph = Context::graph();
   auto& program = Context::program();
 
-  CRSFactorization factorization;
-  factorization.factorizedInverseDiag =
-      std::make_unique<Tensor<Type>>(A.diagonalCoefficients);
-  if (!config_->diagonalBased) {
-    factorization.factorizedOffDiag = Tensor<Type>(A.offDiagonalCoefficients);
-  }
+  // Initialize the factorized matrix with the original matrix A (copy)
+  factorization_.factorizedInverseDiag =
+      std::make_unique<Tensor>(A.diagonalCoefficients);
+  factorization_.factorizedOffDiag =
+      std::make_unique<Tensor>(A.offDiagonalCoefficients);
 
-  if (factorizeMulticolor_) {
-    if (!A.addressing->coloring.has_value()) {
-      throw std::runtime_error(
-          "Matrix has no coloring. Cannot use multicolor factorization");
-    }
-    spdlog::trace("Using multicolor factorization");
-  } else {
-    spdlog::trace("Using sequential factorization");
-  }
-  spdlog::trace("Factorizing in {}-mode", this->name());
+  if (factorizeMulticolor_)
+    throw std::runtime_error("Multicolor factorization not yet implemented");
 
-  poplar::ComputeSet cs = graph.addComputeSet(di);
+  // ILU(0)
+  Execute(
+      [](codedsl::Value diagCoeffs, codedsl::Value offDiagCoeffs,
+         codedsl::Value rowPtr, codedsl::Value colInd) {
+        using namespace codedsl;
 
-  for (size_t tile = 0; tile < A.numTiles(); ++tile) {
-    poplar::Tensor rowPtrTile = A.addressing->rowPtr.tensorOnTile(tile);
-    poplar::Tensor colIndTile = A.addressing->colInd.tensorOnTile(tile);
-    poplar::Tensor diagCoeffsTile =
-        factorization.factorizedInverseDiag->tensorOnTile(tile);
-    poplar::Tensor offDiagCoeffsTile;
-    if (config_->diagonalBased)
-      offDiagCoeffsTile = A.offDiagonalCoefficients.tensorOnTile(tile);
-    else
-      offDiagCoeffsTile = factorization.factorizedOffDiag->tensorOnTile(tile);
-    poplar::Tensor colorSortAddrTile, colorSortStartPtrTile;
-    if (factorizeMulticolor_) {
-      colorSortAddrTile =
-          A.addressing->coloring->colorSortAddr.tensorOnTile(tile);
-      colorSortStartPtrTile =
-          A.addressing->coloring->colorSortStartPtr.tensorOnTile(tile);
-    }
+        Value nRowsWithoutHalo = diagCoeffs.size();
 
-    std::string codeletName = "graphene::matrix::solver::ilu::ILUFactorizeCRS";
-    if (config_->diagonalBased) {
-      codeletName += "Diagonal";
-    }
-    if (factorizeMulticolor_) {
-      codeletName += "Multicolor";
-      codeletName = poputil::templateVertex(
-          codeletName, Traits<Type>::PoplarType, rowPtrTile.elementType(),
-          colIndTile.elementType(), colorSortAddrTile.elementType(),
-          colorSortStartPtrTile.elementType());
-    } else {
-      codeletName = poputil::templateVertex(
-          codeletName, Traits<Type>::PoplarType, rowPtrTile.elementType(),
-          colIndTile.elementType());
-    }
+        // We could also use a codedsl Function instead. This lambda will get
+        // inlined
+        auto getOffDiagValue = [&](Value i, Value j) -> Value {
+          Variable offDiagValue(offDiagCoeffs[0].type(), 0);
+          Variable start = rowPtr[i];
+          Variable end = rowPtr[i + 1];
+          AssumeHardwareLoop(end - start);
+          For(start, end, 1, [&](Value a) {
+            Value jCurrent = colInd[a];
+            If(jCurrent == j, [&] { offDiagValue = offDiagCoeffs[a]; });
+          });
+          return offDiagValue;
+        };
 
-    auto vertex = graph.addVertex(cs, codeletName);
-    graph.setTileMapping(vertex, tile);
-    graph.connect(vertex["rowPtr"], rowPtrTile);
-    graph.connect(vertex["colInd"], colIndTile);
-    graph.connect(vertex["diagCoeffs"], diagCoeffsTile);
-    graph.connect(vertex["offDiagCoeffs"], offDiagCoeffsTile);
-    if (factorizeMulticolor_) {
-      graph.connect(vertex["colorSortAddr"], colorSortAddrTile);
-      graph.connect(vertex["colorSortStartAddr"], colorSortStartPtrTile);
-    }
+        // This is algorithm 10.4 in "Iterative Methods for Sparse Linear
+        // Systems".The coefficients must be initialized with the original
+        // matrix A
 
-    graph.setPerfEstimate(vertex, 100);
-  }
+        // Main loop of ILU(0) factorization
+        For(1, nRowsWithoutHalo, 1, [&](Value i) {
+          // Update the i-th row
 
-  program.add(poplar::program::Execute(cs, di));
+          // for k = 1, ..., i - 1
+          // => iterate over the lower triangular part of the current row
+          Value iStart = rowPtr[i];
+          Value iEnd = rowPtr[i + 1];
+          // AssumeHardwareLoop(iEnd - iStart);
+          For(iStart, iEnd, 1, [&](Value ik) {
+            Value k = colInd[ik];
+
+            // We don't need to check for halo coefficients in the lower
+            // triangular part (due to k < i)
+            If(k >= i, [] { Break(); });
+
+            Value a_kk = diagCoeffs[k];
+            Value a_ik = offDiagCoeffs[ik];
+            a_ik = a_ik / a_kk;
+
+            // The algorithm requires us to iterate over
+            // j = k + 1, ..., n
+            // Due to our matrix layout, we iterate over:
+            // 1. j = k + 1, ..., n with j != i (off-diagonal)
+            // 2. j = i (diagonal)
+
+            // For j = k + 1, ..., n, j != i (off-diagonal)
+            For(ik + 1, iEnd, 1, [&](Value ij) {
+              Value j = colInd[ij];
+              // Stop at halo coefficients
+              If(j >= nRowsWithoutHalo, [] { Break(); });
+
+              Value a_kj = getOffDiagValue(k, j);
+              Value a_ij = offDiagCoeffs[ij];
+              a_ij -= a_ik * a_kj;
+            });
+
+            // For j = i (diagonal)
+            Value a_ki = getOffDiagValue(k, i);
+            Value a_ii = diagCoeffs[i];
+            a_ii -= a_ik * a_ki;
+          });
+        });
+      },
+      InOut(*factorization_.factorizedInverseDiag),
+      config_->diagonalBased ? In(A.offDiagonalCoefficients)
+                             : InOut(*factorization_.factorizedOffDiag),
+      In(A.addressing->rowPtr), In(A.addressing->colInd));
 
   // Invert the diagonal
-  *factorization.factorizedInverseDiag =
-      (Type)1 / *factorization.factorizedInverseDiag;
-
-  factorization_ = std::move(factorization);
+  *factorization_.factorizedInverseDiag =
+      1 / *factorization_.factorizedInverseDiag;
 }
 
-template <DataType Type>
-void Solver<Type>::solveCRS(Tensor<Type>& x, Tensor<Type>& b) {
-  const auto& A = this->matrix().template getImpl<crs::CRSMatrix<Type>>();
+void Solver::solveCRS(Tensor& x, Tensor& b) {
   GRAPHENE_TRACEPOINT();
+  const auto& A = this->matrix().template getImpl<crs::CRSMatrix>();
   DebugInfo di("ILUSolver");
   auto& graph = Context::graph();
   auto& program = Context::program();
-
-  CRSFactorization& factorization = std::get<CRSFactorization>(factorization_);
 
   if (solveMulticolor_) {
     if (!A.addressing->coloring.has_value()) {
@@ -134,74 +141,96 @@ void Solver<Type>::solveCRS(Tensor<Type>& x, Tensor<Type>& b) {
   }
   spdlog::trace("Solving in {}-mode", this->name());
 
-  poplar::ComputeSet cs = graph.addComputeSet(di);
+  Execute(
+      [&](codedsl::Value x, codedsl::Value b, codedsl::Value inverseDiagCoeffs,
+          codedsl::Value offDiagCoeffs, codedsl::Value rowPtr,
+          codedsl::Value colInd) {
+        using namespace codedsl;
 
-  for (size_t tile = 0; tile < A.numTiles(); ++tile) {
-    poplar::Tensor xTile = x.tensorOnTile(tile);
-    poplar::Tensor bTile = b.tensorOnTile(tile);
-    poplar::Tensor rowPtrTile = A.addressing->rowPtr.tensorOnTile(tile);
-    poplar::Tensor colIndTile = A.addressing->colInd.tensorOnTile(tile);
-    poplar::Tensor diagCoeffsTile =
-        factorization.factorizedInverseDiag->tensorOnTile(tile);
+        Value nRowsWithoutHalo = inverseDiagCoeffs.size();
 
-    poplar::Tensor offDiagCoeffsTile;
-    if (config_->diagonalBased)
-      offDiagCoeffsTile = A.offDiagonalCoefficients.tensorOnTile(tile);
-    else
-      offDiagCoeffsTile = factorization.factorizedOffDiag->tensorOnTile(tile);
-    poplar::Tensor colorSortAddrTile, colorSortStartPtrTile;
-    if (solveMulticolor_) {
-      colorSortAddrTile =
-          A.addressing->coloring->colorSortAddr.tensorOnTile(tile);
-      colorSortStartPtrTile =
-          A.addressing->coloring->colorSortStartPtr.tensorOnTile(tile);
-    }
+        // lower triangular solve
+        For(0, nRowsWithoutHalo, 1, [&](Value i) {
+          Variable temp(x[0].type(), b[i]);
 
-    std::string codeletName = "graphene::matrix::solver::ilu::ILUSolveCRS";
-    if (solveMulticolor_) {
-      codeletName += "Multicolor";
-      codeletName = poputil::templateVertex(
-          codeletName, Traits<Type>::PoplarType, rowPtrTile.elementType(),
-          colIndTile.elementType(), colorSortAddrTile.elementType(),
-          colorSortStartPtrTile.elementType(), config_->diagonalBased);
-    } else {
-      codeletName = poputil::templateVertex(
-          codeletName, Traits<Type>::PoplarType, rowPtrTile.elementType(),
-          colIndTile.elementType(), config_->diagonalBased);
-    }
+          // Iterate over lower triangular part of the matrix
+          // => for every i > j
+          Value start = rowPtr[i];
+          Value end = rowPtr[i + 1];
+          // AssumeHardwareLoop(end-start);
+          For(start, end, 1, [&](Value a) {
+            Value j = colInd[a];
 
-    auto vertex = graph.addVertex(cs, codeletName);
-    graph.setTileMapping(vertex, tile);
-    graph.connect(vertex["x"], xTile);
-    graph.connect(vertex["b"], bTile);
-    graph.connect(vertex["rowPtr"], rowPtrTile);
-    graph.connect(vertex["colInd"], colIndTile);
-    graph.connect(vertex["inverseDiagCoeffs"], diagCoeffsTile);
-    graph.connect(vertex["offDiagCoeffs"], offDiagCoeffsTile);
-    if (solveMulticolor_) {
-      graph.connect(vertex["colorSortAddr"], colorSortAddrTile);
-      graph.connect(vertex["colorSortStartAddr"], colorSortStartPtrTile);
-    }
+            // Stop if we reach the diagonal, we only need the lower triangular
+            // part
+            If(i < j, [] { Break(); });
 
-    graph.setPerfEstimate(vertex, 100);
-  }
+            // Ignore halo coefficients
+            If(j >= nRowsWithoutHalo, [] { Break(); });
 
-  program.add(poplar::program::Execute(cs, di));
+            Value l_ij = offDiagCoeffs[a];
+            temp -= l_ij * x[j];
+          });
+
+          if (config_->diagonalBased) {
+            x[i] = temp * inverseDiagCoeffs[i];
+          } else {
+            // The diagonal of L is 1, so no need to multiply
+            x[i] = temp;
+          }
+        });
+
+        // upper triangular solve
+        ForReverse(nRowsWithoutHalo - 1, 0, 1, [&](Value i) {
+          Variable temp(x[0].type(), 0);
+
+          // Iterate over upper triangular part of the matrix
+          // => for every i < j
+          Value start = rowPtr[i];
+          Value end = rowPtr[i + 1];
+          // AssumeHardwareLoop(end-start);
+          ForReverse(end - 1, start, 1, [&](Value a) {
+            Value j = colInd[a];
+
+            // Stop if we reach the diagonal, we only need the upper triangular
+            // part
+            If(j < i, [] { Break(); });
+
+            // Ignore halo coefficients
+            If(j >= nRowsWithoutHalo, [] { Break(); });
+
+            Value a_ij = offDiagCoeffs[a];
+            temp -= a_ij * x[j];
+          });
+          if (config_->diagonalBased) {
+            x[i] = x[i] + temp * inverseDiagCoeffs[i];
+          } else {
+            x[i] = (x[i] + temp) * inverseDiagCoeffs[i];
+          }
+        });
+        return true;
+      },
+      InOut(x), In(b), In(*factorization_.factorizedInverseDiag),
+      config_->diagonalBased ? In(A.offDiagonalCoefficients)
+                             : In(*factorization_.factorizedOffDiag),
+      In(A.addressing->rowPtr), In(A.addressing->colInd));
 }
 
-template <DataType Type>
-void Solver<Type>::factorize() {
+void Solver::factorize() {
   switch (this->matrix().getFormat()) {
     case MatrixFormat::CRS:
-      factorizeCRS();
+      if (config_->diagonalBased)
+        // factorizeCRS_DILU();
+        throw std::runtime_error("Diagonal-based ILU not yet implemented");
+      else
+        factorizeCRS_ILU();
       break;
     default:
       throw std::runtime_error("Unsupported matrix format");
   }
 }
 
-template <DataType Type>
-SolverStats Solver<Type>::solve(Tensor<Type>& x, Tensor<Type>& b) {
+SolverStats Solver::solve(Tensor& x, Tensor& b) {
   switch (this->matrix().getFormat()) {
     case MatrixFormat::CRS:
       solveCRS(x, b);
@@ -214,6 +243,4 @@ SolverStats Solver<Type>::solve(Tensor<Type>& x, Tensor<Type>& b) {
   stats.iterations = 1;
   return stats;
 }
-
-template class Solver<float>;
 }  // namespace graphene::matrix::solver::ilu

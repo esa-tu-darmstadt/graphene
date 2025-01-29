@@ -1,19 +1,12 @@
 #pragma once
 
-#include <poplar/Graph.hpp>
-#include <poplar/Interval.hpp>
+#include <poplar/Tensor.hpp>
 #include <vector>
 
-namespace graphene {
+#include "libgraphene/common/Shape.hpp"
+#include "libgraphene/common/TileMapping.hpp"
 
-/**
- * Calculates the per-IPU intervals based on the tile-to-tensor mapping.
- *
- * @param tileMapping The tile-to-tensor mapping of the graph.
- * @return A vector of poplar::Interval containing one Interval per IPU.
- */
-std::vector<poplar::Interval> calculateIPUIntervals(
-    const poplar::Graph::TileToTensorMapping &tileMapping);
+namespace graphene {
 
 /**
  * Returns the slice of a tensor that is mapped to a specific IPU. The tensor
@@ -22,7 +15,8 @@ std::vector<poplar::Interval> calculateIPUIntervals(
  * @param tensor The tensor to slice.
  * @param ipu The IPU to slice the tensor for.
  */
-poplar::Tensor sliceTensorToIPU(poplar::Tensor tensor, size_t ipu);
+poplar::Tensor sliceTensorToIPU(poplar::Tensor tensor, size_t ipu,
+                                const TileMapping &mapping);
 
 /**
  * Returns the slice of a tensor that is mapped to a specific tile. The tensor
@@ -33,9 +27,8 @@ poplar::Tensor sliceTensorToIPU(poplar::Tensor tensor, size_t ipu);
  * @param cache The mapping of the tensor to tiles. If not provided, the mapping
  * will be queried from the graph, which can take a significant amount of time.
  */
-poplar::Tensor sliceTensorToTile(
-    poplar::Tensor tensor, size_t tile,
-    const poplar::Graph::TileToTensorMapping *mapping = nullptr);
+poplar::Tensor sliceTensorToTile(poplar::Tensor tensor, size_t tile,
+                                 const TileMapping &mapping);
 
 /**
  * @brief Converts an element index to its corresponding coordinates in its
@@ -48,7 +41,7 @@ poplar::Tensor sliceTensorToTile(
  * @param elementIndex The index of the element.
  * @return The coordinates of the element in the tensor.
  */
-std::vector<size_t> getCoordinateFromElementIndex(
-    const std::vector<size_t> &shape, size_t elementIndex);
+std::vector<size_t> getCoordinateFromElementIndex(const DistributedShape &shape,
+                                                  size_t elementIndex);
 
 }  // namespace graphene

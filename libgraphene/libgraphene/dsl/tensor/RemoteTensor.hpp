@@ -3,12 +3,15 @@
 #include <optional>
 #include <poplar/DataStream.hpp>
 #include <poplar/Graph.hpp>
+#include <unordered_map>
 
 #include "libgraphene/common/Concepts.hpp"
+#include "libgraphene/common/Shape.hpp"
+#include "libgraphene/common/TileMapping.hpp"
+#include "libgraphene/common/Type.hpp"
 
 namespace graphene {
 
-template <DataType Type>
 class Tensor;
 
 /**
@@ -19,12 +22,12 @@ class Tensor;
  *
  * @tparam Type The data type of the remote value.
  */
-template <DataType Type>
 class RemoteTensor {
-  // One remote buffer per IPU
-  std::vector<poplar::RemoteBuffer> buffers_;
-  poplar::Graph::TileToTensorMapping tileMapping_;
-  std::vector<size_t> shape_;
+  TypeRef type_;
+  // Remote buffers for each IPU
+  std::unordered_map<size_t, poplar::RemoteBuffer> buffers_;
+  TileMapping tileMapping_;
+  DistributedShape shape_;
   std::string debugStr_;
 
  public:
@@ -38,25 +41,31 @@ class RemoteTensor {
    * @brief Constructs a RemoteValue with the given buffers, tile mapping,
    * shape, and debug string.
    *
-   * @param buffers A vector of remote buffers.
-   * @param tileMapping The mapping of tiles to tensors.
-   * @param shape The shape of the remote value.
+   * @param buffers Remote buffer per IPU.
+   * @param tileMapping Tile mapping of the remote tensor.
+   * @param shape The shape of the remote tensor.
    * @param debugStr A debug string for logging and debugging purposes.
    */
-  explicit RemoteTensor(std::vector<poplar::RemoteBuffer> buffers,
-                        poplar::Graph::TileToTensorMapping tileMapping,
-                        std::vector<size_t> shape, std::string debugStr)
-      : buffers_(std::move(buffers)),
+  explicit RemoteTensor(
+      TypeRef type, std::unordered_map<size_t, poplar::RemoteBuffer> buffers,
+      TileMapping tileMapping, DistributedShape shape, std::string debugStr)
+      : type_(type),
+        buffers_(std::move(buffers)),
         tileMapping_(std::move(tileMapping)),
         shape_(std::move(shape)),
         debugStr_(std::move(debugStr)) {}
 
   /**
-   * @brief Copies the remote value to tile memory.
+   * @brief Copies the remote tensor to tile memory.
    *
-   * @return A Value object representing the copied value in tile memory.
+   * @return A Value object representing the copied tensor in tile memory.
    */
-  Tensor<Type> copyToTile() const;
+  [[nodiscard]] Tensor copyToTile() const;
+
+  /**
+   * @brief Gets the element type of the remote tensor.
+   */
+  TypeRef type() const { return type_; }
 };
 
 }  // namespace graphene
