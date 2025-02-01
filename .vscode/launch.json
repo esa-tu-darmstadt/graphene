@@ -41,10 +41,12 @@
             "program": "${workspaceFolder}/build/applications/benchmark/benchmark",
             "args": [
                 "data/benchmarks/ir_pbicgstab_ilu0_verbose_double_precision.jsonc",
-                "-t10",
+                "-t5888",
                 // "-dprofiling/",
                 // "-mdata/matrices/G3_circuit/G3_circuit.mtx",
-                "-p10,10,10"
+                // "-p20,20,20"
+                "-mdata/matrices/diffusor_5mio/A.mtx"
+                // "-mdata/matrices/Hook_1498/Hook_1498.mtx"
             ],
             "env": {},
             "cwd": "${workspaceFolder}"
