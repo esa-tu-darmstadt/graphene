@@ -11,7 +11,7 @@ Altough symbolically executed, the DSL is designed to be used as if it were dire
 The basic building block of the DSL is the `Value` class. It represents an assignable tensor:
 ```C++
 Runtime runtime(1 /* Number of IPUs */);
-Value<float> a({1, 2, 3, 4});
+Value a({1.0f, 2.0f, 3.0f, 4.0f});
 If(a.reduce() == 0, [&]{
   // Condition is true
   a = a + 2;
