@@ -1,20 +1,20 @@
 /*
  * Graphene Linear Algebra Framework for Intelligence Processing Units.
  * Copyright (C) 2025 Embedded Systems and Applications, TU Darmstadt.
- * 
+ *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as published
  * by the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
- * 
+ *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU Affero General Public License for more details.
- * 
+ *
  * You should have received a copy of the GNU Affero General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
-*/
+ */
 
 #pragma once
 
@@ -35,11 +35,7 @@ class RemoteTensor;
 class HostTensor;
 
 /**
- * @brief Represents a mutable tensor, which can be assigned to.
- * This class has value semantics. When assigned or passed-by-value, a copy
- * program for the underlying tensor is generated.
- *
- * @tparam Type The data type of the tensor.
+ * @brief Represents an assignable tensor. This class has value semantics.
  */
 class Tensor : public Expression {
   std::map<std::type_index, std::any> metadata_;
