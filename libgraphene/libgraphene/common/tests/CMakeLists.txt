@@ -1,0 +1,4 @@
+add_executable(GrapheneCommonTests VectorMapTests.cpp ShapeTests.cpp TypeTests.cpp)
+
+target_link_libraries(GrapheneCommonTests GrapheneCommon gtest_main)
+gtest_discover_tests(GrapheneCommonTests)

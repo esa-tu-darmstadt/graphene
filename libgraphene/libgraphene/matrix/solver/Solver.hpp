@@ -5,29 +5,28 @@
 #include "libgraphene/common/Concepts.hpp"
 #include "libgraphene/dsl/tensor/Tensor.hpp"
 #include "libgraphene/matrix/solver/Configuration.hpp"
-#include "libgraphene/matrix/solver/SolverStats.hpp"
+
 namespace graphene::matrix {
-template <DataType Type>
 class Matrix;
 
 namespace solver {
-template <DataType Type>
+class SolverStats;
 class Solver {
-  const Matrix<Type>& matrix_;
+  const Matrix& matrix_;
 
  public:
-  explicit Solver(const Matrix<Type>& matrix) : matrix_(matrix) {}
+  explicit Solver(const Matrix& matrix) : matrix_(matrix) {}
   virtual ~Solver() = default;
 
-  const Matrix<Type>& matrix() const { return matrix_; }
+  const Matrix& matrix() const { return matrix_; }
 
-  virtual SolverStats solve(Tensor<Type>& x, Tensor<Type>& b) = 0;
+  virtual SolverStats solve(Tensor& x, Tensor& b) = 0;
 
   virtual std::string name() const = 0;
   virtual bool usesInitialGuess() const = 0;
 
-  static std::unique_ptr<Solver<Type>> createSolver(
-      const Matrix<Type>& matrix, std::shared_ptr<Configuration> config);
+  static std::unique_ptr<Solver> createSolver(
+      const Matrix& matrix, std::shared_ptr<Configuration> config);
 
  protected:
   bool shouldUseMulticolor(MultiColorMode mode) const;

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <poplar/Type.hpp>
+#include <type_traits>
 
 #include "libtwofloat/twofloat.hpp"
 namespace graphene {
@@ -25,5 +26,9 @@ template <typename T>
 concept MatrixIndexType =
     std::is_same_v<T, uint8_t> || std::is_same_v<T, uint16_t> ||
     std::is_same_v<T, uint32_t>;
+
+template <typename T>
+concept FloatDataType =
+    std::is_same_v<T, float> || std::is_same_v<T, double> || TwoFloatType<T>;
 
 }  // namespace graphene

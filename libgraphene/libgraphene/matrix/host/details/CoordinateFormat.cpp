@@ -22,4 +22,6 @@ void sortTripletMatrx(TripletMatrix<Type> &tripletMatrix) {
 }
 
 template void sortTripletMatrx(TripletMatrix<float> &tripletMatrix);
+template void sortTripletMatrx(TripletMatrix<double> &tripletMatrix);
+template void sortTripletMatrx(TripletMatrix<doubleword> &tripletMatrix);
 }  // namespace graphene::matrix::host

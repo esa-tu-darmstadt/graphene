@@ -37,13 +37,13 @@ std::tuple<size_t, size_t, size_t> parsePoissonConfig(std::string config) {
                          std::stoi(parts[2]));
 }
 
-void load_vector(Tensor<float>& x, const nlohmann::json& configField,
-                 Matrix<float>& A, bool withHalo, std::string name) {
+void load_vector(Tensor& x, const nlohmann::json& configField, Matrix& A,
+                 bool withHalo, std::string name) {
   if (configField.is_number_float()) {
     x = configField.get<float>();
   } else if (configField.is_string()) {
-    HostTensor<float> x_host = host::loadVectorFromFile<float>(
-        configField.get<std::string>(), A.hostMatrix(), withHalo, name);
+    HostTensor x_host = A.hostMatrix().loadVectorFromFile(
+        Type::FLOAT32, configField.get<std::string>(), withHalo, name);
     x = x_host.copyToRemote().copyToTile();
   } else {
     throw std::runtime_error(fmt::format(
@@ -119,22 +119,23 @@ int main(int argc, char** argv) {
   spdlog::info("Building data flow graph");
 
   // Load the matrix and the vectors
-  host::HostMatrix<float> hostA;
+  host::HostMatrix hostA;
   if (!cliConfig.matrixPath.empty()) {
-    hostA = host::loadMatrixFromFile<float>(cliConfig.matrixPath, numTiles);
+    hostA =
+        host::loadMatrixFromFile(Type::FLOAT32, cliConfig.matrixPath, numTiles);
   } else if (!cliConfig.poissonConfig.empty()) {
     auto [nx, ny, nz] = parsePoissonConfig(cliConfig.poissonConfig);
-    hostA = host::generate3DPoissonMatrix<float>(nx, ny, nz, numTiles);
+    hostA = host::generate3DPoissonMatrix(Type::FLOAT32, nx, ny, nz, numTiles);
 
   } else {
     throw std::runtime_error(
         "No matrix source provided. Please provide either "
         "a matrix file or a Poisson matrix config.");
   }
-  Matrix<float> A = hostA.copyToTile();
+  Matrix A = hostA.copyToTile();
 
-  Tensor<float> x = A.createUninitializedVector<float>(true);
-  Tensor<float> b = A.createUninitializedVector<float>(false);
+  Tensor x = A.createUninitializedVector(Type::FLOAT32, true);
+  Tensor b = A.createUninitializedVector(Type::FLOAT32, false);
 
   // Initialize b
   if (config.contains("b"))

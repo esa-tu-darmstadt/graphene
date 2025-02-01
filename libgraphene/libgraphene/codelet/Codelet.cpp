@@ -26,8 +26,12 @@ void graphene::addCodelets(poplar::Graph &graph,
   // Add codelets for stack reservation
   poplar::ComputeSet cs = graph.addComputeSet("stackReservation");
   for (size_t proc = 0; proc < graph.getTarget().getNumTiles(); ++proc) {
-    poplar::VertexRef v = graph.addVertex(cs, "sim::codelet::StackReservation");
-    graph.setTileMapping(v, proc);
+    poplar::VertexRef v1 =
+        graph.addVertex(cs, "sim::codelet::StackReservationWorker");
+    graph.setTileMapping(v1, proc);
+    poplar::VertexRef v2 =
+        graph.addVertex(cs, "sim::codelet::StackReservationSupervisor");
+    graph.setTileMapping(v2, proc);
   }
   prog.add(poplar::program::Execute(cs));
 }

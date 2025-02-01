@@ -8,8 +8,8 @@
     "solver": {
         "type": "IterativeRefinement",
         "relResidual": 1e-9,
-        "maxIterations": 1000,
-        "mixedPrecision": true,
+        "maxIterations": 3,
+        "extendedPrecisionType": "twofloat32",
         "printPerformanceAfterSolve": true,
         "innerSolver": {
             "type": "PBiCGStab",

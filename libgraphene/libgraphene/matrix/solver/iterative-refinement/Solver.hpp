@@ -7,19 +7,18 @@
 #include "libgraphene/matrix/solver/SolverStats.hpp"
 #include "libgraphene/matrix/solver/iterative-refinement/Configuration.hpp"
 namespace graphene::matrix::solver::iterativerefinement {
-template <DataType Type>
-class Solver : public solver::Solver<Type> {
+class Solver : public solver::Solver {
   std::shared_ptr<Configuration> config_;
-  std::shared_ptr<solver::Solver<Type>> innerSolver_;
+  std::shared_ptr<solver::Solver> innerSolver_;
 
   template <DataType ExtendedPrecisionType>
-  SolverStats solveMixedPrecision(Tensor<Type>& x, Tensor<Type>& b) const;
-  SolverStats solveSinglePrecision(Tensor<Type>& x, Tensor<Type>& b) const;
+  SolverStats solveMixedPrecision(Tensor& x, Tensor& b) const;
+  SolverStats solveSinglePrecision(Tensor& x, Tensor& b) const;
 
  public:
-  Solver(const Matrix<Type>& matrix, std::shared_ptr<Configuration> config);
+  Solver(const Matrix& matrix, std::shared_ptr<Configuration> config);
 
-  SolverStats solve(Tensor<Type>& x, Tensor<Type>& b) override;
+  SolverStats solve(Tensor& x, Tensor& b) override;
 
   std::string name() const override { return "IterativeRefinement"; }
   bool usesInitialGuess() const override { return true; }

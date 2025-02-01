@@ -1,7 +1,10 @@
 #pragma once
 
+#include <spdlog/fmt/bundled/core.h>
+
 #include <array>
 #include <cstddef>
+#include <stdexcept>
 #include <tuple>
 namespace graphene::detail {
 template <typename F, typename = void>  // used for SFINAE later
@@ -12,6 +15,7 @@ template <typename R, typename... A>
 struct function_traits<R(A...)> {
   using return_type = R;
   using args_type = std::tuple<A...>;
+  static constexpr std::size_t arity = sizeof...(A);
 };
 
 // specialization for function pointer types
@@ -19,6 +23,7 @@ template <typename R, typename... A>
 struct function_traits<R (*)(A...)> {
   using return_type = R;
   using args_type = std::tuple<A...>;
+  static constexpr std::size_t arity = sizeof...(A);
 };
 
 // specialization for pointers to member functions
@@ -61,6 +66,13 @@ ret_t callFunctionWithUnpackedArgs(F& code, args_t args,
  */
 template <typename ret_t, typename F, typename args_t>
 ret_t callFunctionWithUnpackedArgs(F& code, args_t args) {
+  // Make sure the number of arguments matches the number of parameters
+  if (std::tuple_size_v<typename function_traits<F>::args_type> != args.size())
+    throw std::invalid_argument(
+        fmt::format("Number of arguments ({}) does not match number of "
+                    "parameters in function ({})",
+                    args.size(),
+                    std::tuple_size_v<typename function_traits<F>::args_type>));
   if constexpr (std::is_same_v<ret_t, void>) {
     callFunctionWithUnpackedArgs<ret_t>(
         code, args, std::make_index_sequence<function_traits<F>::arity>{});
@@ -68,5 +80,18 @@ ret_t callFunctionWithUnpackedArgs(F& code, args_t args) {
     return callFunctionWithUnpackedArgs<ret_t>(
         code, args, std::make_index_sequence<function_traits<F>::arity>{});
 }
+
+template <typename T, typename U>
+concept invocable_with_args_of =
+    std::invocable<T, U> ||                           // callable with one U
+    std::invocable<T, U, U> ||                        // callable with two U's
+    std::invocable<T, U, U, U> ||                     // callable with three U's
+    std::invocable<T, U, U, U, U> ||                  // callable with four U's
+    std::invocable<T, U, U, U, U, U> ||               // callable with five U's
+    std::invocable<T, U, U, U, U, U, U> ||            // callable with six U's
+    std::invocable<T, U, U, U, U, U, U, U> ||         // callable with seven U's
+    std::invocable<T, U, U, U, U, U, U, U, U> ||      // callable with eight U's
+    std::invocable<T, U, U, U, U, U, U, U, U, U> ||   // callable with nine U's
+    std::invocable<T, U, U, U, U, U, U, U, U, U, U>;  // callable with ten U's
 
 }  // namespace graphene::detail

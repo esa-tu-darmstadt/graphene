@@ -6,7 +6,7 @@
 #include "libgraphene/common/Concepts.hpp"
 namespace graphene::matrix::host {
 
-template <DataType Type>
+template <FloatDataType Type>
 TripletMatrix<Type> generate3DPoissonTripletMatrix(size_t nx, size_t ny,
                                                    size_t nz) {
   const size_t stencil = 7;
@@ -55,5 +55,11 @@ TripletMatrix<Type> generate3DPoissonTripletMatrix(size_t nx, size_t ny,
 template TripletMatrix<float> generate3DPoissonTripletMatrix(size_t nx,
                                                              size_t ny,
                                                              size_t nz);
+template TripletMatrix<double> generate3DPoissonTripletMatrix(size_t nx,
+                                                              size_t ny,
+                                                              size_t nz);
+template TripletMatrix<doubleword> generate3DPoissonTripletMatrix(size_t nx,
+                                                                  size_t ny,
+                                                                  size_t nz);
 
 }  // namespace graphene::matrix::host

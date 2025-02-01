@@ -9,32 +9,34 @@
 #include "libgraphene/matrix/solver/SolverStats.hpp"
 #include "libgraphene/matrix/solver/ilu/Configuration.hpp"
 namespace graphene::matrix::solver::ilu {
-template <DataType Type>
-class Solver : public solver::Solver<Type> {
+class Solver : public solver::Solver {
   std::shared_ptr<Configuration> config_;
 
   struct CRSFactorization {
     // The inverse of the diagonal of the factorized matrix
-    std::unique_ptr<Tensor<Type>> factorizedInverseDiag;
+    std::unique_ptr<Tensor> factorizedInverseDiag;
 
     // The off-diagonal of the factorized matrix
-    std::optional<Tensor<Type>> factorizedOffDiag;
+    std::unique_ptr<Tensor> factorizedOffDiag;
   };
 
-  std::variant<CRSFactorization> factorization_;
+  CRSFactorization factorization_;
 
   bool solveMulticolor_;
   bool factorizeMulticolor_;
 
   void factorize();
 
-  void solveCRS(Tensor<Type>& x, Tensor<Type>& b);
+  void solveCRS(Tensor& x, Tensor& b);
+  void solveCRS_old(Tensor& x, Tensor& b);
+
   void factorizeCRS();
+  void factorizeCRS_ILU_old();
 
  public:
-  Solver(const Matrix<Type>& matrix, std::shared_ptr<Configuration> config);
+  Solver(const Matrix& matrix, std::shared_ptr<Configuration> config);
 
-  SolverStats solve(Tensor<Type>& x, Tensor<Type>& b) override;
+  SolverStats solve(Tensor& x, Tensor& b) override;
 
   std::string name() const override {
     return config_->diagonalBased ? "DILU" : "ILU(0)";

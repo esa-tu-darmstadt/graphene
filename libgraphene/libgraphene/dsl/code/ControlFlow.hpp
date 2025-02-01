@@ -22,7 +22,7 @@ void Return(Value value);
  */
 template <typename... Args>
 inline void Printf(std::string formatter, Args... args) {
-  CodeGen::emitCode("printf(\"" + formatter + "\"");
+  CodeGen::emitCode("printf(\"" + formatter + "\\n\"");
   ((CodeGen::emitCode(", " + args.expr())), ...);
   CodeGen::emitCode(");\n");
 }
@@ -43,13 +43,44 @@ void If(Value cond, std::function<void()> thenDo,
         std::function<void()> elseDo = {});
 
 /**
+ * @brief Represents a break statement in the CodeDSL language.
+ */
+void Break();
+
+/**
+ * @brief Represents a continue statement in the CodeDSL language.
+ */
+void Continue();
+
+/**
  * @brief Represents a while loop in the CodeDSL language.
  * @param cond The loop condition Value.
  * @param body The function representing the loop body.
  */
 void While(Value cond, std::function<void()> body);
 
+/**
+ * @brief Represents a for loop in the CodeDSL language. Iterates from start
+ * (inclusive) to end (exclusive) with a given step size in positive direction.
+  @details for(auto i = start; i < end; i += step) { body(i); }
+ */
 void For(Value start, Value end, Value step, std::function<void(Value)> body,
-         bool reverse = false, TypeRef iteratorType = Type::INT32);
+         TypeRef iteratorType = Type::INT32);
+
+/**
+ * @brief Represents a for loop in the CodeDSL language. Iterates from start
+ * (inclusive) to end (INCLUSIVE) with a given step size, in reverse direction.
+ * @details for(auto i = start; i > end; i -= step) { body(i); }
+ */
+void ForReverse(Value start, Value end, Value step,
+                std::function<void(Value)> body,
+                TypeRef iteratorType = Type::INT32);
+
+namespace detail {
+Variable ForStart(Value start, Value end, Value step, bool reverse = false,
+                  TypeRef iteratorType = Type::INT32);
+void ForEnd();
+
+}  // namespace detail
 
 }  // namespace graphene::codedsl

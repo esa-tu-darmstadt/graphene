@@ -14,8 +14,11 @@
 #include <stdexcept>
 
 #include "libgraphene/codelet/Codelet.hpp"
+#include "libgraphene/common/Concepts.hpp"
+#include "libgraphene/common/Traits.hpp"
 #include "libgraphene/util/Context.hpp"
 #include "libgraphene/util/Tracepoint.hpp"
+#include "libgraphene/util/VertexCache.hpp"
 #include "poplar/DeviceManager.hpp"
 #include "poplar/Graph.hpp"
 #include "poplar/Program.hpp"
@@ -23,12 +26,65 @@
 
 using namespace graphene;
 
+namespace {
+std::filesystem::path findRuntimeLib(std::string defaultPath,
+                                     std::string envVarName) {
+  std::filesystem::path runtimeLibPath;
+  if (getenv(envVarName.c_str()) != nullptr) {
+    runtimeLibPath = std::filesystem::path(getenv(envVarName.c_str()));
+    spdlog::trace(
+        "Setting runtime library path due to the {} environment "
+        "variable to {}",
+        envVarName, runtimeLibPath.string());
+  } else {
+    runtimeLibPath = std::filesystem::path(defaultPath);
+  }
+  if (!std::filesystem::exists(runtimeLibPath)) {
+    throw std::runtime_error("Could not find runtime library at " +
+                             runtimeLibPath.string());
+  }
+  return runtimeLibPath;
+}
+}  // namespace
+
 Runtime *Runtime::instance_ = nullptr;
 
 Runtime::Runtime(size_t numIPUs, std::filesystem::path expressionStorageDir)
     : expressionStorageDir_(expressionStorageDir) {
   assert(instance_ == nullptr && "Runtime already registered");
   instance_ = this;
+
+  // Setup the runtime library paths
+  twoFloatSourceDir_ =
+      findRuntimeLib(LIBTWOFLOAT_INCLUDE_DIR, "LIBTWOFLOAT_INCLUDE");
+  spdlog::debug("TwoFloat library include directory: {}",
+                twoFloatSourceDir_.string());
+  ipuThreadSyncSourceDir_ =
+      findRuntimeLib(LIBIPUTHREADSYNC_INCLUDE_DIR, "LIBIPUTHREADSYNC_INCLUDE");
+  spdlog::debug("IpuThreadSync library include directory: {}",
+                ipuThreadSyncSourceDir_.string());
+
+  // Setup the expression storage directory
+  if (getenv("EXPRESSION_STORAGE_DIR") != nullptr) {
+    expressionStorageDir_ =
+        std::filesystem::path(getenv("EXPRESSION_STORAGE_DIR"));
+    spdlog::debug(
+        "Overriding expression storage directory due to the "
+        "EXPRESSION_STORAGE_DIR environment variable");
+  }
+  if (!std::filesystem::exists(expressionStorageDir_))
+    if (!std::filesystem::create_directories(expressionStorageDir_))
+      throw std::runtime_error(
+          "Could not create expression storage directory: " +
+          expressionStorageDir_.string());
+  spdlog::debug("Expression storage directory: {}",
+                expressionStorageDir_.string());
+
+  // Setup expression dumping options
+  // if (getenv("EXPRESSION_DUMP_ASM") != nullptr) dumpExpressionAsm_ = true;
+  if (getenv("EXPRESSION_DUMP_IR") != nullptr) dumpExpressionIR_ = true;
+
+  VertexCache::initCache(expressionStorageDir_);
   init(numIPUs);
 }
 Runtime::~Runtime() { instance_ = nullptr; }
@@ -45,7 +101,8 @@ void Runtime::copyToRemoteBuffers(poplar::Engine &engine) {
       // A poplar_error is thrown if the remote buffer is never used, a
       // std::out_of_range is thrown if the remote buffer is optimized away.
       engine.copyToRemoteBuffer(registration.data, registration.buffer.handle(),
-                                0);
+                                registration.repeatIndex);
+
     } catch (std::out_of_range &e) {
       // std::cout << "Remote bufer " << registration.buffer.handle()
       //           << " not found. Maybe its not used and was optimized away."
@@ -56,8 +113,16 @@ void Runtime::copyToRemoteBuffers(poplar::Engine &engine) {
 
 void Runtime::copyFromRemoteBuffers(poplar::Engine &engine) {
   for (auto &registration : copiesFromRemoteBuffers_) {
-    engine.copyFromRemoteBuffer(registration.buffer.handle(), registration.data,
-                                0);
+    // Use the ArrayRef<T> overload instead of the void* overload to allow
+    // specifying the number of elements. Requires a type switch to get the
+    // correct compile time type.
+    typeSwitch(
+        registration.type->poplarEquivalentType(), [&]<PoplarNativeType T>() {
+          gccs::ArrayRef<T> data(reinterpret_cast<T *>(registration.data),
+                                 registration.numElements);
+          engine.copyFromRemoteBuffer<T>(registration.buffer.handle(), data,
+                                         registration.repeatIndex);
+        });
   }
 };
 
@@ -188,9 +253,9 @@ poplar::Engine Runtime::compileGraph(
 
   poplar::program::Sequence fullProgram_({preludeProgram_, mainProgram_});
 
-  std::ofstream graphProgramDump("graphProgram.json");
-  poplar::program::dumpProgram(graph_, fullProgram_, graphProgramDump);
-  graphProgramDump.close();
+  // std::ofstream graphProgramDump("graphProgram.json");
+  // poplar::program::dumpProgram(graph_, fullProgram_, graphProgramDump);
+  // graphProgramDump.close();
 
   poplar::Executable exec =
       poplar::compileGraph(graph_, {fullProgram_}, options,
@@ -204,4 +269,21 @@ poplar::Engine Runtime::compileGraph(
 
   spdlog::debug("Graph compilation took {} seconds", stopwatch);
   return poplar::Engine(exec, options);
+}
+
+std::string Runtime::getCurrentExecutionTime() const {
+  if (!engine_)
+    throw std::runtime_error(
+        "This function is only available during execution");
+  auto currentTime = engine_->getTimeStamp();
+  return engine_->reportTiming(executionStartTime_, currentTime);
+}
+
+std::filesystem::path Runtime::getRuntimeLibIncludeDir(RuntimeLib lib) const {
+  switch (lib) {
+    case RuntimeLib::TwoFloat:
+      return twoFloatSourceDir_;
+    case RuntimeLib::IpuThreadSync:
+      return ipuThreadSyncSourceDir_;
+  }
 }

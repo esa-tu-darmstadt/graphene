@@ -4,10 +4,13 @@
 #include <chrono>
 #include <cstdint>
 #include <filesystem>
+#include <poplar/Graph.hpp>
+#include <poplar/HostFunctionCallback.hpp>
 #include <string>
 #include <vector>
 
 #include "libgraphene/common/Traits.hpp"
+#include "libgraphene/common/Type.hpp"
 #include "libgraphene/util/Tracepoint.hpp"
 #include "poplar/Device.hpp"
 #include "poplar/Engine.hpp"
@@ -20,8 +23,11 @@ class Runtime {
   void init(size_t numIPUs);
 
   struct RemoteBufferRegistration {
+    TypeRef type;
     poplar::RemoteBuffer buffer;
+    size_t repeatIndex;
     void *data;
+    size_t numElements;
   };
 
   struct DataStreamRegistration {
@@ -57,6 +63,11 @@ class Runtime {
   poplar::Engine::TimerTimePoint executionStartTime_;
 
   std::filesystem::path expressionStorageDir_;
+  std::filesystem::path twoFloatSourceDir_;
+  std::filesystem::path ipuThreadSyncSourceDir_;
+
+  bool dumpExpressionAsm_ = true;
+  bool dumpExpressionIR_ = false;
 
  public:
   struct HostResource {
@@ -106,18 +117,23 @@ class Runtime {
   /// \brief Register a copy to a remote buffer
   /// \param handle The handle of the remote buffer
   /// \param buffer The buffer to copy from
-  void registerCopyToRemoteBuffer(poplar::RemoteBuffer buffer,
-                                  const void *data) {
+  void registerCopyToRemoteBuffer(TypeRef type, poplar::RemoteBuffer buffer,
+                                  const void *data, size_t numElements,
+                                  size_t repeatIndex = 0) {
     assert(data != nullptr && "Data is null");
-    copiesToRemoteBuffers_.push_back({buffer, const_cast<void *>(data)});
+    copiesToRemoteBuffers_.push_back(
+        {type, buffer, repeatIndex, const_cast<void *>(data), numElements});
   }
 
   /// \brief Register a copy from a remote buffer
   /// \param handle The handle of the remote buffer
   /// \param buffer The buffer to copy to
-  void registerCopyFromRemoteBuffer(poplar::RemoteBuffer buffer, void *data) {
+  void registerCopyFromRemoteBuffer(TypeRef type, poplar::RemoteBuffer buffer,
+                                    void *data, size_t numElements,
+                                    size_t repeatIndex = 0) {
     assert(data != nullptr && "Data is null");
-    copiesFromRemoteBuffers_.push_back({buffer, data});
+    copiesFromRemoteBuffers_.push_back(
+        {type, buffer, repeatIndex, data, numElements});
   }
 
   /// \brief Register a host function
@@ -159,13 +175,11 @@ class Runtime {
     return expressionStorageDir_;
   }
 
-  std::string getCurrentExecutionTime() const {
-    if (!engine_)
-      throw std::runtime_error(
-          "This function is only available during execution");
-    auto currentTime = engine_->getTimeStamp();
-    return engine_->reportTiming(executionStartTime_, currentTime);
-  }
+  enum class RuntimeLib { TwoFloat, IpuThreadSync };
+  /// \brief Get the path to the include directory of the given runtime library
+  std::filesystem::path getRuntimeLibIncludeDir(RuntimeLib lib) const;
+
+  std::string getCurrentExecutionTime() const;
 
   template <typename T, typename... Args>
   std::shared_ptr<T> createResource(Args &&...args) {
@@ -178,5 +192,11 @@ class Runtime {
   bool freeResource(std::shared_ptr<T> resource) {
     return resources_.erase(resource) != 0;
   }
+
+  /// True if the user requested to dump generated expressions as assembly
+  bool dumpExpressionAsm() const { return dumpExpressionAsm_; }
+
+  /// True if the user requested to dump generated expressions as IR
+  bool dumpExpressionIR() const { return dumpExpressionIR_; }
 };
 }  // namespace graphene

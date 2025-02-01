@@ -9,25 +9,32 @@
 #include <fast_matrix_market/app/triplet.hpp>
 #include <fstream>
 #include <poplar/Graph.hpp>
+#include <ranges>
 #include <stdexcept>
 
+#include "libgraphene/common/Concepts.hpp"
+#include "libgraphene/common/Shape.hpp"
+#include "libgraphene/common/TileMapping.hpp"
 #include "libgraphene/dsl/tensor/HostTensor.hpp"
-#include "libgraphene/dsl/tensor/HostTensorVariant.hpp"
 #include "libgraphene/dsl/tensor/RemoteTensor.hpp"
-#include "libgraphene/dsl/tensor/RemoteTensorVariant.hpp"
 #include "libgraphene/dsl/tensor/Tensor.hpp"
-#include "libgraphene/dsl/tensor/TensorVariant.hpp"
 #include "libgraphene/matrix/Matrix.hpp"
 #include "libgraphene/matrix/details/crs/CRSAddressing.hpp"
 #include "libgraphene/matrix/host/HostMatrix.hpp"
 #include "libgraphene/matrix/host/TileLayout.hpp"
+#include "libgraphene/matrix/host/details/CoordinateFormat.hpp"
 #include "libgraphene/matrix/host/details/MatrixMarket.hpp"
 #include "libgraphene/util/Tracepoint.hpp"
+#include "libtwofloat/operators.hpp"
 
-template <graphene::DataType Type>
+using namespace graphene;
+
+namespace {
+template <DataType Type>
 static id_t getEdgeWeight(Type edgeCoeff, Type maxEdgeCoeff,
                           int maxEdgeWeight) {
-  Type absLinearInterp = abs(edgeCoeff) * maxEdgeWeight / maxEdgeCoeff;
+  int absLinearInterp =
+      (int)(abs(edgeCoeff) * Type(maxEdgeWeight) / Type(maxEdgeCoeff));
   return std::max<int>(1,
                        absLinearInterp);  // Each edge weight must be at least 1
 }
@@ -43,44 +50,47 @@ constexpr size_t getUnsignedIntegerWidthForValue(size_t value) {
   return width / 8;
 }
 
-template <graphene::DataType ConcreteType, graphene::DataType... Types>
-void constructHostValueForType(graphene::HostValueVariant<Types...> &hostValue,
-                               std::vector<std::vector<size_t>> data,
+/// Constructs a host value by combining the given per-tile arrays, casting it
+/// to the concrete data type. Data is a range of ranges (aka a vector of
+/// vectors or similiar), where the outer range represents the tiles and the
+/// inner range the values of the tile.
+template <typename ConcreteType, std::ranges::input_range R>
+  requires std::ranges::input_range<std::ranges::range_value_t<R>>
+void constructHostValueForType(HostTensor &hostValue, R data,
                                std::string name) {
   size_t numTiles = data.size();
-  // Determine the shape and tile mapping
-  poplar::Graph::TileToTensorMapping tileMapping(numTiles);
+  FirstDimDistribution firstDimDistribution;
+  firstDimDistribution.reserve(numTiles);
 
   size_t numValues = 0;
   for (size_t tileID = 0; tileID < numTiles; ++tileID) {
-    tileMapping[tileID].emplace_back(numValues,
-                                     numValues + data[tileID].size());
+    firstDimDistribution[tileID] = data[tileID].size();
     numValues += data[tileID].size();
   }
-  std::vector<size_t> shape = {numValues};
+
+  DistributedShape shape =
+      DistributedShape::onTiles({numValues}, firstDimDistribution);
+  TileMapping mapping = TileMapping::linearMappingWithShape(shape);
 
   // Combine the data to a single vector with the concrete data type
   std::vector<ConcreteType> concreteData;
   concreteData.reserve(numValues);
-  for (auto &tile : data) {
+  for (const auto &tile : data) {
     std::copy(tile.begin(), tile.end(), std::back_inserter(concreteData));
   }
-  std::string typeName =
-      (graphene::Traits<ConcreteType>::PoplarType).toString();
+  TypeRef type = getType<ConcreteType>();
   spdlog::trace(
       "Constructing host value for {} of type {} for {} tiles with {} datums.",
-      name, typeName, numTiles, numValues);
-  hostValue = graphene::HostTensor<ConcreteType>(
-      std::move(concreteData), std::move(shape), std::move(tileMapping), name);
+      name, type->str(), numTiles, numValues);
+  hostValue = HostTensor::createPersistent(
+      std::move(concreteData), std::move(shape), std::move(mapping), name);
 }
-
-template <graphene::DataType... Types>
-void constructHostValue(graphene::HostValueVariant<Types...> &hostValue,
-                        std::vector<std::vector<size_t>> data,
-                        std::string name) {
+template <std::ranges::input_range R>
+  requires std::ranges::input_range<std::ranges::range_value_t<R>>
+void constructHostValue(HostTensor &hostValue, R data, std::string name) {
   // Determine the required data type
   size_t maxValue = 0;
-  for (auto &tile : data) {
+  for (const auto &tile : data) {
     auto maxTileValue = std::max_element(tile.begin(), tile.end());
     if (maxTileValue != tile.end()) {
       maxValue = std::max(maxValue, *maxTileValue);
@@ -106,51 +116,56 @@ void constructHostValue(graphene::HostValueVariant<Types...> &hostValue,
           width * 32));
   }
 }
+}  // namespace
 
 namespace graphene::matrix::host::crs {
-template <DataType Type>
-CRSHostMatrix<Type>::CRSHostMatrix(TripletMatrix<Type> tripletMatrix,
-                                   size_t numTiles, std::string name)
-    : HostMatrixBase<Type>(numTiles, name) {
+template <FloatDataType Type>
+CRSHostMatrix::CRSHostMatrix(TripletMatrix<Type> tripletMatrix, size_t numTiles,
+                             std::string name)
+    : HostMatrixBase(numTiles, name) {
   sortTripletMatrx(tripletMatrix);
 
-  globalMatrix_ = convertToCRS(std::move(tripletMatrix));
+  auto [globalAddressing, globalMatrixValues] =
+      convertToCRS(std::move(tripletMatrix));
 
-  this->partitioning_ =
-      std::move(calculatePartitioning(numTiles, globalMatrix_));
+  this->globalAddressing_ = std::move(globalAddressing);
+  this->partitioning_ = std::move(
+      calculatePartitioning(numTiles_, globalMatrixValues, globalAddressing_));
+
   this->tileLayout_ =
-      std::move(calculateTileLayouts(this->partitioning_, globalMatrix_));
-
-  calculateLocalAddressings();
+      std::move(calculateTileLayouts(this->partitioning_, globalAddressing_));
+  this->localAddressings_ =
+      calculateLocalAddressings(globalAddressing_, this->tileLayout_);
 
   calculateRowColors();
   calculateColorAddressings();
 
-  decomposeValues();
+  decomposeValues(globalMatrixValues);
 }
 
-template <DataType Type>
-CRSHostMatrix<Type>::CRSMatrix CRSHostMatrix<Type>::convertToCRS(
-    TripletMatrix<Type> tripletMatrix) {
+template <FloatDataType Type>
+std::tuple<CRSHostMatrix::CRSAddressing, CRSHostMatrix::CRSMatrixValues<Type>>
+CRSHostMatrix::convertToCRS(TripletMatrix<Type> tripletMatrix) {
   GRAPHENE_TRACEPOINT();
   spdlog::info("Converting COO matrix to CRS");
 
-  CRSMatrix crs;
+  CRSMatrixValues<Type> crsValues;
+  CRSAddressing crsAddressing;
 
   // Copy the diagonal values to the CRS matrix
-  crs.diagValues.resize(tripletMatrix.nrows);
+  crsValues.diagValues.resize(tripletMatrix.nrows);
   for (size_t i = 0; i < tripletMatrix.entries.size(); i++) {
     if (tripletMatrix.entries[i].row == tripletMatrix.entries[i].col) {
-      crs.diagValues[tripletMatrix.entries[i].row] =
+      crsValues.diagValues[tripletMatrix.entries[i].row] =
           tripletMatrix.entries[i].val;
     }
   }
 
-  crs.addressing.rowPtr.reserve(tripletMatrix.nrows + 1);
-  crs.addressing.colInd.reserve(tripletMatrix.entries.size());
-  crs.offDiagValues.reserve(tripletMatrix.nrows);
+  crsAddressing.rowPtr.reserve(tripletMatrix.nrows + 1);
+  crsAddressing.colInd.reserve(tripletMatrix.entries.size());
+  crsValues.offDiagValues.reserve(tripletMatrix.nrows);
 
-  crs.addressing.rowPtr.push_back(0);
+  crsAddressing.rowPtr.push_back(0);
 
   size_t lastRow = 0;
 
@@ -162,39 +177,41 @@ CRSHostMatrix<Type>::CRSMatrix CRSHostMatrix<Type>::convertToCRS(
 
     // Increase the row pointer if we have moved to the next row
     while (lastRow != tripletMatrix.entries[i].row) {
-      crs.addressing.rowPtr.push_back(crs.addressing.colInd.size());
+      crsAddressing.rowPtr.push_back(crsAddressing.colInd.size());
       lastRow++;
     }
 
-    crs.addressing.colInd.push_back(tripletMatrix.entries[i].col);
-    crs.offDiagValues.push_back(tripletMatrix.entries[i].val);
+    crsAddressing.colInd.push_back(tripletMatrix.entries[i].col);
+    crsValues.offDiagValues.push_back(tripletMatrix.entries[i].val);
   }
 
   // Add the last row pointers. The loop is required if the matrix ends with
   // rows with no off-diagonal values
-  while (crs.addressing.rowPtr.size() <= tripletMatrix.nrows)
-    crs.addressing.rowPtr.push_back(crs.addressing.colInd.size());
+  while (crsAddressing.rowPtr.size() <= tripletMatrix.nrows)
+    crsAddressing.rowPtr.push_back(crsAddressing.colInd.size());
 
-  assert(crs.addressing.rowPtr.size() == tripletMatrix.nrows + 1);
-  assert(crs.diagValues.size() == crs.addressing.rowPtr.size() - 1);
-  return crs;
+  assert(crsAddressing.rowPtr.size() == tripletMatrix.nrows + 1);
+  assert(crsValues.diagValues.size() == crsAddressing.rowPtr.size() - 1);
+  return {crsAddressing, crsValues};
 }
 
-template <DataType Type>
-Partitioning CRSHostMatrix<Type>::calculatePartitioning(size_t numTiles,
-                                                        const CRSMatrix &crs) {
+template <FloatDataType Type>
+Partitioning CRSHostMatrix::calculatePartitioning(
+    size_t &numTiles, const CRSMatrixValues<Type> &matrixValues,
+    const CRSAddressing &addressing) {
   GRAPHENE_TRACEPOINT();
   spdlog::info("Distributing matrix to {} processors", numTiles);
 
-  Partitioning partitioning;
-
   // number of vertices
-  idx_t nvtxs = (idx_t)crs.addressing.rowPtr.size() - 1;
+  idx_t nvtxs = (idx_t)addressing.rowPtr.size() - 1;
 
   // number of processors
   idx_t nparts = (idx_t)numTiles;
   if (nparts == 1) {
     spdlog::warn("Only one processor, skipping matrix partitioning");
+    Partitioning partitioning;
+    partitioning.numTiles = 1;
+    numTiles = 1;
     partitioning.rowToTile.resize(nvtxs, 0);
     return partitioning;
   }
@@ -203,19 +220,19 @@ Partitioning CRSHostMatrix<Type>::calculatePartitioning(size_t numTiles,
   idx_t ncon = 1;
 
   std::vector<idx_t> xadj;  // rowPtr
-  xadj.reserve(crs.addressing.rowPtr.size());
+  xadj.reserve(addressing.rowPtr.size());
   std::vector<idx_t> adjncy;  // colInd
-  adjncy.reserve(crs.addressing.colInd.size());
+  adjncy.reserve(addressing.colInd.size());
   std::vector<idx_t> edgeWeights;  // edge weights
-  edgeWeights.reserve(crs.offDiagValues.size());
+  edgeWeights.reserve(matrixValues.offDiagValues.size());
   std::vector<idx_t> vertexWeights;  // vertex weights
-  vertexWeights.reserve(crs.addressing.rowPtr.size() - 1);
+  vertexWeights.reserve(addressing.rowPtr.size() - 1);
 
   // Find the maximum edge coefficient so that we can scale the edge
   // weights to integers
-  float maxEdgeCoeff = *std::max_element(
-      crs.offDiagValues.begin(), crs.offDiagValues.end(),
-      [](float a, float b) { return std::abs(a) < std::abs(b); });
+  Type maxEdgeCoeff = *std::max_element(
+      matrixValues.offDiagValues.begin(), matrixValues.offDiagValues.end(),
+      [](auto a, auto b) { return std::abs(a) < std::abs(b); });
   maxEdgeCoeff = abs(maxEdgeCoeff);
   const int maxEdgeWeight = 1000;
 
@@ -224,15 +241,14 @@ Partitioning CRSHostMatrix<Type>::calculatePartitioning(size_t numTiles,
   // diagonal values. We assume that the storage for the diagonal values
 
   // Construct the adjacency list and edge weights
-  for (size_t i = 0; i < crs.addressing.rowPtr.size() - 1; i++) {
-    size_t numEdges = crs.addressing.rowPtr[i + 1] - crs.addressing.rowPtr[i];
+  for (size_t i = 0; i < addressing.rowPtr.size() - 1; i++) {
+    size_t numEdges = addressing.rowPtr[i + 1] - addressing.rowPtr[i];
     xadj.push_back(adjncy.size());
     vertexWeights.push_back(numEdges + 1);
-    for (size_t j = crs.addressing.rowPtr[i]; j < crs.addressing.rowPtr[i + 1];
-         j++) {
-      adjncy.push_back(crs.addressing.colInd[j]);
-      edgeWeights.push_back(
-          getEdgeWeight(crs.offDiagValues[j], maxEdgeCoeff, maxEdgeWeight));
+    for (size_t j = addressing.rowPtr[i]; j < addressing.rowPtr[i + 1]; j++) {
+      adjncy.push_back(addressing.colInd[j]);
+      edgeWeights.push_back(getEdgeWeight(matrixValues.offDiagValues[j],
+                                          maxEdgeCoeff, maxEdgeWeight));
     }
   }
   xadj.push_back(adjncy.size());
@@ -275,17 +291,46 @@ Partitioning CRSHostMatrix<Type>::calculatePartitioning(size_t numTiles,
 
   spdlog::trace("Total edgecut after partitioning: {}", edgecut);
 
-  // Copy partitioning to the output
+  /// When the number of requested tiles is large compared to the matrix, some
+  /// tiles might end up empty. We need to shift the partitioning to remove
+  /// these empty tiles.
+  std::vector<size_t> verticesPerProc(numTiles, 0);
+  for (size_t i = 0; i < nvtxs; i++) {
+    verticesPerProc[part[i]]++;
+  }
+
+  size_t numEmptyProcs = 0;
+
+  // For each proc, the mapping from the original proc id to the shifted proc
+  // id
+  std::vector<ssize_t> procToShiftedProcMapping(numTiles);
+  for (size_t i = 0; i < numTiles; i++) {
+    if (verticesPerProc[i] == 0) {
+      numEmptyProcs++;
+      procToShiftedProcMapping[i] = -1;
+      continue;
+    }
+    procToShiftedProcMapping[i] = i - numEmptyProcs;
+  }
+  numTiles = numTiles - numEmptyProcs;
+
+  // Copy partitioning to the output, accounting for empty processors
+  Partitioning partitioning;
+  partitioning.numTiles = numTiles;
   partitioning.rowToTile.reserve(nvtxs);
-  std::copy(part.begin(), part.end(),
-            std::back_inserter(partitioning.rowToTile));
+  for (size_t i = 0; i < nvtxs; i++) {
+    partitioning.rowToTile.push_back(procToShiftedProcMapping[part[i]]);
+  }
+  spdlog::info(
+      "Tried to partition matrix to {} procs. Resulted in {} non-empty "
+      "partitions.",
+      numTiles + numEmptyProcs, numTiles);
 
   return partitioning;
 }
 
-template <DataType Type>
-std::vector<TileLayout> CRSHostMatrix<Type>::calculateTileLayouts(
-    const Partitioning &partitioning, const CRSMatrix &matrix) {
+std::vector<TileLayout> CRSHostMatrix::calculateTileLayouts(
+    const Partitioning &partitioning, const CRSAddressing &addressing) {
   GRAPHENE_TRACEPOINT();
   spdlog::info("Calculating regions for each tile in parallel");
 
@@ -293,7 +338,7 @@ std::vector<TileLayout> CRSHostMatrix<Type>::calculateTileLayouts(
   size_t numTiles = *std::max_element(partitioning.rowToTile.begin(),
                                       partitioning.rowToTile.end()) +
                     1;
-  size_t numRows = matrix.addressing.rowPtr.size() - 1;
+  size_t numRows = addressing.rowPtr.size() - 1;
 
   // Initialize the regions for each tile
   std::vector<TileLayout> tiles;
@@ -307,10 +352,10 @@ std::vector<TileLayout> CRSHostMatrix<Type>::calculateTileLayouts(
   auto neighbourTilesOfRow = [&](size_t row) {
     std::set<size_t> neighbours;
     size_t ownTileId = partitioning.rowToTile[row];
-    for (size_t i = matrix.addressing.rowPtr[row];
-         i < matrix.addressing.rowPtr[row + 1]; i++) {
-      if (partitioning.rowToTile[matrix.addressing.colInd[i]] != ownTileId)
-        neighbours.insert(partitioning.rowToTile[matrix.addressing.colInd[i]]);
+    for (size_t i = addressing.rowPtr[row]; i < addressing.rowPtr[row + 1];
+         i++) {
+      if (partitioning.rowToTile[addressing.colInd[i]] != ownTileId)
+        neighbours.insert(partitioning.rowToTile[addressing.colInd[i]]);
     }
     return neighbours;
   };
@@ -366,8 +411,7 @@ std::vector<TileLayout> CRSHostMatrix<Type>::calculateTileLayouts(
   return tiles;
 }
 
-template <DataType Type>
-matrix::Matrix<Type> CRSHostMatrix<Type>::copyToTile() {
+matrix::Matrix CRSHostMatrix::copyToTile() {
   GRAPHENE_TRACEPOINT();
   spdlog::info("Copying matrix to tiles");
 
@@ -386,141 +430,159 @@ matrix::Matrix<Type> CRSHostMatrix<Type>::copyToTile() {
   auto crsAddressing = std::make_shared<matrix::crs::CRSAddressing>(
       std::move(rowPtr), std::move(colInd), std::move(coloring));
 
-  return matrix::Matrix<Type>(matrix::crs::CRSMatrix<Type>(
+  return matrix::Matrix(matrix::crs::CRSMatrix(
       this->shared_from_this(), std::move(crsAddressing),
       std::move(offDiagonalValues), std::move(diagValues)));
 }
-
-template <DataType Type>
-void CRSHostMatrix<Type>::calculateLocalAddressings() {
+std::vector<CRSHostMatrix::CRSAddressing>
+CRSHostMatrix::calculateLocalAddressings(
+    const CRSAddressing &globalAddressing,
+    const std::vector<TileLayout> &tileLayouts) {
   GRAPHENE_TRACEPOINT();
   spdlog::info("Calculating local addressings in parallel");
-  size_t numTiles = this->tileLayout_.size();
+  size_t numTiles = tileLayouts.size();
 
-  localAddressings_.resize(numTiles);
-
-  // For each tile, stores their local row pointers and column indices
-  std::vector<std::vector<size_t>> rowPtrs(numTiles);
-  std::vector<std::vector<size_t>> colInds(numTiles);
+  // Holds the decomposed rowPtr and colInd for each tile
+  std::vector<CRSHostMatrix::CRSAddressing> localAddressings(numTiles);
 
   // Calculate the local addressings
-  std::for_each(
-      std::execution::par, this->tileLayout_.begin(), this->tileLayout_.end(),
-      [&](TileLayout &tile) {
-        // Calculate rowPtr and colInd for this tile
-        auto &rowPtr = rowPtrs[tile.tileId];
-        auto &colInd = colInds[tile.tileId];
-        for (size_t localRow = 0; localRow < tile.localToGlobalRow.size();
-             ++localRow) {
-          // Do not include halo rows in the local addressing
-          if (tile.isHalo(localRow)) continue;
+  std::for_each(std::execution::par, tileLayouts.begin(), tileLayouts.end(),
+                [&](const TileLayout &tile) {
+                  // Calculate rowPtr and colInd for this tile
+                  auto &rowPtr = localAddressings[tile.tileId].rowPtr;
+                  auto &colInd = localAddressings[tile.tileId].colInd;
+                  for (size_t localRow = 0;
+                       localRow < tile.localToGlobalRow.size(); ++localRow) {
+                    // Do not include halo rows in the local addressing
+                    if (tile.isHalo(localRow)) continue;
 
-          rowPtr.push_back(colInd.size());
+                    rowPtr.push_back(colInd.size());
 
-          // The columns must be sorted. They are not automatically
-          // sorted even if the global matrix is sorted!
-          // For this, first collect the columns in a set and then
-          // insert them (sorted) into the colInd vector
+                    // The columns must be sorted. They are not automatically
+                    // sorted even if the global matrix is sorted!
+                    // For this, first collect the columns in a set and then
+                    // insert them (sorted) into the colInd vector
 
-          size_t globalRow = tile.localToGlobalRow[localRow];
-          size_t globalStart = globalMatrix_.addressing.rowPtr[globalRow];
-          size_t globalEnd = globalMatrix_.addressing.rowPtr[globalRow + 1];
-          std::set<size_t> cols;
-          for (size_t i = globalMatrix_.addressing.rowPtr[globalRow];
-               i < globalMatrix_.addressing.rowPtr[globalRow + 1]; ++i) {
-            size_t globalCol = globalMatrix_.addressing.colInd[i];
-            size_t localCol = tile.globalToLocalRow[globalCol];
-            cols.insert(localCol);
-          }
-          // Insert the sorted columns into the colInd vector
-          colInd.insert(colInd.end(), cols.begin(), cols.end());
-        }
-        rowPtr.push_back(colInd.size());
+                    size_t globalRow = tile.localToGlobalRow[localRow];
+                    size_t globalStart = globalAddressing.rowPtr[globalRow];
+                    size_t globalEnd = globalAddressing.rowPtr[globalRow + 1];
+                    std::set<size_t> cols;
+                    for (size_t i = globalAddressing.rowPtr[globalRow];
+                         i < globalAddressing.rowPtr[globalRow + 1]; ++i) {
+                      size_t globalCol = globalAddressing.colInd[i];
+                      size_t localCol = tile.globalToLocalRow.at(globalCol);
+                      cols.insert(localCol);
+                    }
+                    // Insert the sorted columns into the colInd vector
+                    colInd.insert(colInd.end(), cols.begin(), cols.end());
+                  }
+                  rowPtr.push_back(colInd.size());
 
-        // It is possible that the column indices is empty if a tile has only
-        // isolated rows
-        // In this case, add a dummy "0" to the colInd vector to avoid an
-        // empty vector
-        if (colInd.empty()) {
-          colInd.push_back(0);
-        }
+                  // It is possible that the column indices is empty if a tile
+                  // has only isolated rows In this case, add a dummy "0" to the
+                  // colInd vector to avoid an empty vector
+                  if (colInd.empty()) {
+                    colInd.push_back(0);
+                  }
+                });
 
-        localAddressings_[tile.tileId].rowPtr = rowPtr;
-        localAddressings_[tile.tileId].colInd = colInd;
-      });
-
-  spdlog::trace("Constructing host values");
-  constructHostValue(rowPtr_, std::move(rowPtrs), this->name_ + "_rowPtr");
-  constructHostValue(colInd_, std::move(colInds), this->name_ + "_colInd");
+  return localAddressings;
 }
-template <DataType Type>
-void CRSHostMatrix<Type>::decomposeValues() {
+template <FloatDataType Type>
+void CRSHostMatrix::decomposeValues(const CRSMatrixValues<Type> &globalMatrix) {
   GRAPHENE_TRACEPOINT();
-  spdlog::info("Decomposing matrix values");
-  colInd_.get<uint32_t>({1});
-  // Decompose diagonal values. This can be done with decomposeVector because
-  // there is exactly one value per row.
-  diagValues_ = this->decomposeVector(globalMatrix_.diagValues, false);
-  offDiagValues_ = decomposeOffDiagCoefficients(globalMatrix_.offDiagValues);
+
+  // Decompose diagonal coefficients. This can be done with decomposeVector
+  // because there is exactly one value per row.
+  spdlog::trace("Decomposing diagonal coefficients");
+  diagValues_ = this->decomposeVector(globalMatrix.diagValues, false);
+
+  // Decompose off-diagonal coefficients
+  spdlog::trace("Decomposing off-diagonal coefficients");
+  offDiagValues_ = decomposeOffDiagCoefficients(globalMatrix.offDiagValues);
+
+  // Decompose rowPtr
+  spdlog::trace("Decomposing rowPtrs");
+  auto decomposedRowPtrs = localAddressings_ | std::ranges::views::transform(
+                                                   [](const auto &addressing) {
+                                                     return addressing.rowPtr;
+                                                   });
+  constructHostValue(rowPtr_, std::move(decomposedRowPtrs),
+                     this->name_ + "_rowPtr");
+
+  // Decompose colInd
+  spdlog::trace("Decomposing colInds");
+  auto decomposedColInds = localAddressings_ | std::ranges::views::transform(
+                                                   [](const auto &addressing) {
+                                                     return addressing.colInd;
+                                                   });
+  constructHostValue(colInd_, std::move(decomposedColInds),
+                     this->name_ + "_colInd");
 }
 
-template <DataType Type>
-HostTensor<Type> CRSHostMatrix<Type>::decomposeOffDiagCoefficients(
-    const std::vector<Type> &values) const {
-  std::vector<Type> decomposedValues;
-  decomposedValues.reserve(colInd_.numElements());
+template <FloatDataType Type>
+HostTensor CRSHostMatrix::decomposeOffDiagCoefficients(
+    const std::vector<Type> &values, TypeRef targetType) const {
+  return typeSwitch(targetType, [&]<FloatDataType TargetType>() -> HostTensor {
+    std::vector<TargetType> decomposedValues;
+    decomposedValues.reserve(colInd_.numElements());
 
-  poplar::Graph::TileToTensorMapping mapping(this->tileLayout_.size());
+    FirstDimDistribution firstDimDistribution;
+    firstDimDistribution.reserve(this->tileLayout_.size());
 
-  // Decompose and create the tile mapping
-  size_t numElements = 0;
-  for (auto &tile : this->tileLayout_) {
-    size_t numElementsOnThisTile = 0;
-    const CRSAddressing &localAddressing = localAddressings_[tile.tileId];
-    // Iterate over the rows of this tile
-    for (size_t localRow = 0; localRow < tile.localToGlobalRow.size();
-         ++localRow) {
-      if (tile.isHalo(localRow)) continue;
-      size_t globalRow = tile.localToGlobalRow[localRow];
+    // Decompose and create the tile mapping
+    size_t numElements = 0;
+    for (auto &tile : this->tileLayout_) {
+      size_t numElementsOnThisTile = 0;
+      const CRSAddressing &localAddressing = localAddressings_[tile.tileId];
+      // Iterate over the rows of this tile
+      for (size_t localRow = 0; localRow < tile.localToGlobalRow.size();
+           ++localRow) {
+        if (tile.isHalo(localRow)) continue;
+        size_t globalRow = tile.localToGlobalRow[localRow];
 
-      // Remember that the columns of the local matrix are sorted, so the
-      // values must be sorted by column as well.
+        // Remember that the columns of the local matrix are sorted, so the
+        // values must be sorted by column as well.
 
-      // For this, collect all off-diagonal values of this row as a pair of
-      // its column and value. Then sort them by column and insert them into
-      // the decomposedValues vector.
+        // For this, collect all off-diagonal values of this row as a pair of
+        // its column and value. Then sort them by column and insert them into
+        // the decomposedValues vector.
 
-      std::set<std::pair<size_t, Type>> offDiagValues;
-      for (size_t i = globalMatrix_.addressing.rowPtr[globalRow];
-           i < globalMatrix_.addressing.rowPtr[globalRow + 1]; ++i) {
-        size_t globalCol = globalMatrix_.addressing.colInd[i];
-        if (globalCol == globalRow) continue;
-        size_t localCol = tile.globalToLocalRow.at(globalCol);
-        offDiagValues.insert({localCol, globalMatrix_.offDiagValues[i]});
+        std::set<std::pair<size_t, TargetType>> offDiagValues;
+        for (size_t i = globalAddressing_.rowPtr[globalRow];
+             i < globalAddressing_.rowPtr[globalRow + 1]; ++i) {
+          size_t globalCol = globalAddressing_.colInd[i];
+          if (globalCol == globalRow) continue;
+          size_t localCol = tile.globalToLocalRow.at(globalCol);
+          TargetType castedValue = static_cast<TargetType>(values[i]);
+          offDiagValues.insert({localCol, castedValue});
+        }
+
+        for (const auto &pair : offDiagValues) {
+          decomposedValues.push_back(pair.second);
+          numElementsOnThisTile++;
+        }
       }
-
-      for (const auto &pair : offDiagValues) {
-        decomposedValues.push_back(pair.second);
+      // Add a dummy "0" if the tile has no off-diagonal values
+      if (numElementsOnThisTile == 0) {
+        decomposedValues.push_back(0);
         numElementsOnThisTile++;
       }
+      firstDimDistribution[tile.tileId] = numElementsOnThisTile;
+      numElements += numElementsOnThisTile;
     }
-    // Add a dummy "0" if the tile has no off-diagonal values
-    if (numElementsOnThisTile == 0) {
-      decomposedValues.push_back(0);
-      numElementsOnThisTile++;
-    }
-    mapping[tile.tileId].emplace_back(numElements,
-                                      numElements + numElementsOnThisTile);
-    numElements += numElementsOnThisTile;
-  }
 
-  std::vector<size_t> shape = {numElements};
-  return HostTensor<Type>(std::move(decomposedValues), std::move(shape),
-                          std::move(mapping), this->name_ + "_offDiag");
+    TensorShape shape = {numElements};
+    DistributedShape distributedShape =
+        DistributedShape::onTiles(shape, firstDimDistribution);
+    TileMapping mapping = TileMapping::linearMappingWithShape(distributedShape);
+    return HostTensor::createPersistent(
+        std::move(decomposedValues), std::move(distributedShape),
+        std::move(mapping), this->name_ + "_offDiag");
+  });
 }
 
-template <DataType Type>
-void CRSHostMatrix<Type>::calculateRowColors() {
+void CRSHostMatrix::calculateRowColors() {
   assert(!localAddressings_.empty());
   rowColors_.resize(this->numTiles_);
   numColors_.resize(this->numTiles_, 0);
@@ -609,8 +671,7 @@ void CRSHostMatrix<Type>::calculateRowColors() {
       });
 }
 
-template <DataType Type>
-void CRSHostMatrix<Type>::calculateColorAddressings() {
+void CRSHostMatrix::calculateColorAddressings() {
   GRAPHENE_TRACEPOINT();
   spdlog::info("Calculating color addressings in parallel");
 
@@ -671,6 +732,13 @@ void CRSHostMatrix<Type>::calculateColorAddressings() {
                      this->name_ + "_colorSortStartPtr");
 }
 
-// Template instantiations
-template class CRSHostMatrix<float>;
+// Explicit instantiation of the CRSHostMatrix constructor for the supported
+// floating point types
+template CRSHostMatrix::CRSHostMatrix(TripletMatrix<float> tripletMatrix,
+                                      size_t numTiles, std::string name);
+template CRSHostMatrix::CRSHostMatrix(TripletMatrix<double> tripletMatrix,
+                                      size_t numTiles, std::string name);
+template CRSHostMatrix::CRSHostMatrix(TripletMatrix<doubleword> tripletMatrix,
+                                      size_t numTiles, std::string name);
+
 }  // namespace graphene::matrix::host::crs

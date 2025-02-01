@@ -11,37 +11,33 @@
 #include "libgraphene/matrix/solver/restarter/Solver.hpp"
 
 namespace graphene::matrix::solver {
-template <DataType Type>
-std::unique_ptr<Solver<Type>> Solver<Type>::createSolver(
-    const Matrix<Type> &matrix, std::shared_ptr<Configuration> config) {
+std::unique_ptr<Solver> Solver::createSolver(
+    const Matrix &matrix, std::shared_ptr<Configuration> config) {
   std::string solverName = config->solverName();
   spdlog::debug("Creating solver {}", solverName);
 
   if (auto gaussSeidelConfig =
           std::dynamic_pointer_cast<gaussseidel::Configuration>(config)) {
-    return std::make_unique<gaussseidel::Solver<Type>>(matrix,
-                                                       gaussSeidelConfig);
+    return std::make_unique<gaussseidel::Solver>(matrix, gaussSeidelConfig);
   } else if (auto irConfig =
                  std::dynamic_pointer_cast<iterativerefinement::Configuration>(
                      config)) {
-    return std::make_unique<iterativerefinement::Solver<Type>>(matrix,
-                                                               irConfig);
+    return std::make_unique<iterativerefinement::Solver>(matrix, irConfig);
   } else if (auto iluConfig =
                  std::dynamic_pointer_cast<ilu::Configuration>(config)) {
-    return std::make_unique<ilu::Solver<Type>>(matrix, iluConfig);
+    return std::make_unique<ilu::Solver>(matrix, iluConfig);
   } else if (auto pbicgstabConfig =
                  std::dynamic_pointer_cast<pbicgstab::Configuration>(config)) {
-    return std::make_unique<pbicgstab::Solver<Type>>(matrix, pbicgstabConfig);
+    return std::make_unique<pbicgstab::Solver>(matrix, pbicgstabConfig);
   } else if (auto restarterConfig =
                  std::dynamic_pointer_cast<restarter::Configuration>(config)) {
-    return std::make_unique<restarter::Solver<Type>>(matrix, restarterConfig);
+    return std::make_unique<restarter::Solver>(matrix, restarterConfig);
   } else {
     throw std::runtime_error("Unknown solver: " + solverName);
   }
 }
 
-template <DataType Type>
-bool Solver<Type>::shouldUseMulticolor(MultiColorMode mode) const {
+bool Solver::shouldUseMulticolor(MultiColorMode mode) const {
   switch (mode) {
     case MultiColorMode::On:
       return true;
@@ -52,7 +48,5 @@ bool Solver<Type>::shouldUseMulticolor(MultiColorMode mode) const {
   }
   return false;
 }
-
-template class Solver<float>;
 
 }  // namespace graphene::matrix::solver

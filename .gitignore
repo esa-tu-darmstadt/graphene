@@ -10,3 +10,5 @@ graphProgram.json
 profile*.pop
 archive.a
 debug.cbor
+
+**/logs/

@@ -40,6 +40,19 @@ void Configuration::setFieldFromJSON<MultiColorMode>(
   }
 }
 
+template <>
+void Configuration::setFieldFromJSON<TypeRef>(nlohmann::json const& config,
+                                              std::string const& field,
+                                              TypeRef& value) {
+  if (config.find(field) != config.end()) {
+    value = parseType(config[field]);
+    if (!value) {
+      throw std::runtime_error(
+          fmt::format("Unknown type in JSON config: {}", config[field]));
+    }
+  }
+}
+
 template <typename T>
 void Configuration::setFieldFromJSON(nlohmann::json const& config,
                                      std::string const& field, T& value) {

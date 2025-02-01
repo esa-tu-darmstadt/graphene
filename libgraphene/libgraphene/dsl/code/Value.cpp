@@ -6,6 +6,7 @@
 #include <poplar/GraphElements.hpp>
 
 #include "CodeGen.hpp"
+#include "libgraphene/common/Type.hpp"
 
 namespace graphene::codedsl {
 
@@ -18,7 +19,14 @@ std::string Value::expr() const { return expr_; }
 void Value::emitValue() const { CodeGen::emitCode(expr_); }
 
 Value Value::cast(TypeRef type) {
-  return Value(type, fmt::format("({}){}", type->str(), expr_), false);
+  return Value(type, fmt::format("(({}){})", type->str(), expr_), false);
+}
+
+Value Value::reinterpretCast(TypeRef type) {
+  return Value(type,
+               fmt::format("(*reinterpret_cast<{}>(&{}))",
+                           PtrType::get(type)->str(), expr_),
+               false);
 }
 
 Value Value::operator[](Value index) {
@@ -26,8 +34,8 @@ Value Value::operator[](Value index) {
     throw std::runtime_error(
         fmt::format("Type {} is not subscriptable", type_->str()));
   }
-  return Value(type()->elementType(), expr() + "[" + index.expr() + "]",
-               isAssignable_);
+  // TODO: Determine whether the result is assignable
+  return Value(type()->elementType(), expr() + "[" + index.expr() + "]", true);
 }
 
 Value Value::size() const {
@@ -58,33 +66,43 @@ Value::Value(TypeRef type, std::string expr, bool isAssignable)
       type_(std::move(type)),
       isAssignable_(isAssignable) {}
 
-Variable::Variable(TypeRef type)
-    : Value(type,
-            CodeGen::emitVariableDeclaration(type,
-                                             CodeGen::generateVariableName()),
-            true) {}
-
-Variable::Variable(TypeRef type, Value initializer)
+Variable::Variable(TypeRef type, CTypeQualifiers qualifiers)
     : Value(type,
             CodeGen::emitVariableDeclaration(
-                type, CodeGen::generateVariableName(), initializer.expr()),
-            true) {}
+                type, CodeGen::generateVariableName(), qualifiers),
+            true) {
+  if (qualifiers.Const) {
+    throw std::runtime_error(
+        "Variable with const qualifier must have an initializer");
+  }
+}
 
-Variable::Variable(Value initializer)
-    : Variable(initializer.type(), initializer) {}
+Variable::Variable(TypeRef type, Value initializer, CTypeQualifiers qualifiers)
+    : Value(type,
+            CodeGen::emitVariableDeclaration(type,
+                                             CodeGen::generateVariableName(),
+                                             qualifiers, initializer.expr()),
+            !qualifiers.Const) {}
 
-MemberVariable::MemberVariable(TypeRef type)
-    : Value(type, CodeGen::generateVariableName(), true) {}
+Variable::Variable(Value initializer, CTypeQualifiers qualifiers)
+    : Variable(initializer.type(), initializer, qualifiers) {}
 
-MemberVariable::MemberVariable(TypeRef type, Value initializer)
+MemberVariable::MemberVariable(TypeRef type, CTypeQualifiers qualifiers)
     : Value(type, CodeGen::generateVariableName(), true),
-      initializer_(initializer) {}
+      qualifiers_(qualifiers) {}
+
+MemberVariable::MemberVariable(TypeRef type, Value initializer,
+                               CTypeQualifiers qualifiers)
+    : Value(type, CodeGen::generateVariableName(), true),
+      initializer_(initializer),
+      qualifiers_(qualifiers) {}
 
 void MemberVariable::declare() const {
   if (initializer_) {
-    CodeGen::emitVariableDeclaration(type(), expr(), initializer_->expr());
+    CodeGen::emitVariableDeclaration(type(), expr(), qualifiers_,
+                                     initializer_->expr());
   } else {
-    CodeGen::emitVariableDeclaration(type(), expr());
+    CodeGen::emitVariableDeclaration(type(), expr(), qualifiers_);
   }
 }
 

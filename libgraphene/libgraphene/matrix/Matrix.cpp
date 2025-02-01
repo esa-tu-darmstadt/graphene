@@ -2,15 +2,13 @@
 
 #include "libgraphene/matrix/host/HostMatrix.hpp"
 #include "libgraphene/matrix/solver/Solver.hpp"
+#include "libgraphene/matrix/solver/SolverStats.hpp"
 
 namespace graphene::matrix {
-template <DataType Type>
-void Matrix<Type>::solve(Tensor<Type> &x, Tensor<Type> &b,
-                         std::shared_ptr<solver::Configuration> &config) {
-  auto solver = solver::Solver<Type>::createSolver(*this, config);
+void Matrix::solve(Tensor &x, Tensor &b,
+                   std::shared_ptr<solver::Configuration> &config) {
+  auto solver = solver::Solver::createSolver(*this, config);
   solver->solve(x, b);
 }
 
-// Explicit instantiation
-template class Matrix<float>;
 }  // namespace graphene::matrix

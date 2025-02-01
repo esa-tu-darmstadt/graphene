@@ -1,16 +1,30 @@
 #pragma once
 
-#include <poplar/Graph.hpp>
-#include <popops/Expr.hpp>
+#include <optional>
+#include <poplar/Interval.hpp>
+#include <poplar/Tensor.hpp>
 #include <vector>
 
 #include "libgraphene/common/Concepts.hpp"
+#include "libgraphene/common/Shape.hpp"
+#include "libgraphene/common/TileMapping.hpp"
 #include "libgraphene/common/Traits.hpp"
 #include "libgraphene/common/Type.hpp"
 
 namespace graphene {
+enum class ReduceOperation {
+  ADD,
+  MUL,
+  MIN,
+  MAX,
+  LOGICAL_AND,  ///< Only supports boolean operands.
+  LOGICAL_OR,   ///< Only supports boolean operands.
+  SQUARE_ADD,   ///< Squares each element before applying ADD reduction.
+};
 
-template <DataType Type>
+namespace detail {
+class ExpressionBase;
+}
 class Tensor;
 
 /**
@@ -22,57 +36,70 @@ class Tensor;
  *
  * @tparam Type The data type of the expression.
  */
-template <DataType Type>
 class Expression {
-  popops::expr::Any expr_;
-  std::vector<poplar::Tensor> placeholders_;
+  std::unique_ptr<detail::ExpressionBase> expr_;
+
+  // The tile mapping and shape of the tensor. Cached for performance reasons.
+  mutable std::optional<TileMapping> tileMapping_;
+  mutable std::optional<DistributedShape> shape_;
 
  public:
-  using DataType = Type;
-
   /** Constructors */
   Expression() = delete;
+  virtual ~Expression();
+
+  /** Copy and move constructors */
+  Expression(const Expression &expr);
+  Expression(Expression &&expr) noexcept;
+
+  /** Copy and move assignments */
+  Expression &operator=(const Expression &expr);
+  Expression &operator=(Expression &&expr) noexcept;
 
   /**
-   * @brief Construct an expression from a popops expression and placeholders.
-   *
-   * @param expr The popops expression.
-   * @param placeholders The placeholders used in the expression.
+   * @brief Construct an expression from an inner expression.
    */
-  Expression(popops::expr::Any expr, std::vector<poplar::Tensor> placeholders)
-    requires PoplarNativeType<Type>;
+  explicit Expression(std::unique_ptr<detail::ExpressionBase> expr);
 
   /**
-   * @brief Construct an expression from a constant value.
+   * @brief Construct an expression from a tensor.
+   */
+  Expression(const Tensor &tensor);
+
+  /**
+   * @brief Construct an expression from a constant value
+   * The type of the expression is inferred from the value.
    *
    * @param value The constant value.
    */
-  Expression(Type value)
-    requires PoplarNativeType<Type>;
+  template <DataType Type>
+  Expression(Type value);
 
   /**
-   * @brief Construct an expression from a poplar tensor.
+   * @brief Construct an expression from a poplar tensor. The type of the
+   * expression is inferred from the tensor, or explicitly provided if the
+   * poplar type is ambiguous (i.e., LONGLONG can be int64_t, double, or
+   * two<float>).
    *
    * @param tensor The poplar tensor.
    */
-  Expression(poplar::Tensor tensor);
+  Expression(poplar::Tensor tensor, TypeRef type);
 
   /**
-   * @brief Get the underlying popops expression.
+   * @brief Get the shape of the tensor. The shape is cached for performance
+   * reasons.
+   *
+   * @return TileMapping The tile mapping.
    */
-  const popops::expr::Any &expr() const { return expr_; }
+  const DistributedShape &shape() const;
 
   /**
-   * @brief Get the placeholders used in the expression.
+   * @brief Get the tile mapping of the tensor. The tile mapping is cached for
+   * performance reasons.
+   *
+   * @return TileMapping The tile mapping.
    */
-  const std::vector<poplar::Tensor> &placeholders() const {
-    return placeholders_;
-  }
-
-  /**
-   * @brief Get the shape of the expression.
-   */
-  std::vector<size_t> shape() const;
+  const TileMapping &tileMapping() const;
 
   /**
    * @brief Get the rank of the expression.
@@ -90,19 +117,75 @@ class Expression {
   TypeRef type() const;
 
   /**
-   * @brief Cast the expression to a different data type.
-   *
-   * Only available to and from native poplar data types.
-   * @tparam DestType The destination data type.
-   * @return Expression<DestType> The casted expression.
+   * @brief Get the expression as a string.
    */
-  template <typename DestType>
-  Expression<DestType> cast() const
-    requires PoplarNativeType<Type> && PoplarNativeType<DestType>
-  {
-    return Expression<DestType>(
-        popops::expr::Cast(expr_, Traits<DestType>::PoplarType), placeholders_);
-  }
+  std::string asString() const;
+
+  /**
+   * @brief Cast the expression to a different data type.
+   */
+  Expression cast(TypeRef destType) const;
+
+  /**
+   * @brief Broadcast the expression to a new shape.
+   */
+  Expression broadcast(DistributedShape shape) const;
+
+  /**
+   * @brief Reduce the value along the given dimensions.
+   */
+  Expression reduce(size_t dim = 0,
+                    ReduceOperation op = ReduceOperation::ADD) const;
+
+  /**
+   * @brief Reduce the value along the given dimensions on each tile.
+   */
+  Expression reducePerTile(size_t dim, ReduceOperation op) const;
+
+  /**
+   * @brief Reduce the value along the given dimensions on each worker thread.
+   */
+  Expression reducePerWorker(size_t dim, ReduceOperation op) const;
+
+  /**
+   * @brief Reduce the tensor across the first dimension in groups of tiles.
+   * @details Each group is of size \p groupSize in the tile dimension.
+   * If \p groupSize is numTilesPerIPU, this effectively performs a per-IPU
+   * reduction. If \p groupSize is numTiles, then it's a global reduction.
+   *
+   * @param groupSize The number of tiles per group.
+   * @param op The reduction operation to apply.
+   * @return Tensor The reduced tensor.
+   */
+  Expression reduceGrouped(size_t groupSize, ReduceOperation op) const;
+
+  /**
+   * @brief Permute the dimensions of the expression. Currently, only supports
+   * permutation in which the first dimension is not moved.
+   */
+  Expression permute(std::vector<size_t> permutation) const;
+
+  /**
+   * @brief Materialize the expression to a new \ref Value.
+   * @return Tensor The materialized value.
+   */
+  Tensor materialize() const;
+
+  /**
+   * @brief Materialize the expression if it is not already materialized.
+   */
+  Tensor materializeIfNecessary() const;
+
+  /**
+   * @brief Get the root of the underlying expression tree.
+   */
+  detail::ExpressionBase &base() const { return *expr_; }
+
+  /**
+   * @brief Prints the expression to the output stream. May require
+   * materializing the expression.
+   */
+  void print(std::string name = "") const;
 };
 
 /**
@@ -110,19 +193,17 @@ class Expression {
  *
  * @tparam Type The data type of the expression.
  * @param expr The expression to materialize.
- * @return Tensor<Type> The materialized value.
+ * @return Tensor The materialized value.
  */
-template <PoplarNativeType Type>
-Tensor<Type> materializeExpression(const Expression<Type> &expr);
+Tensor materializeExpression(const Expression &expr);
 
 /**
  * @brief Materializes an expression into an existing \ref Value.
  *
  * @tparam Type The data type of the expression.
  * @param expr The expression to materialize.
- * @return Tensor<Type> The materialized value.
+ * @return Tensor The materialized value.
  */
-template <PoplarNativeType Type>
-void materializeExpression(const Expression<Type> &expr, Tensor<Type> &dest);
+void materializeExpression(const Expression &expr, Tensor &dest);
 
 }  // namespace graphene

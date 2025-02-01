@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstdint>
 #include <functional>
 #include <optional>
 #include <string>
@@ -16,13 +17,32 @@ namespace graphene::codedsl {
 class Value {
  public:
   /**
-   * @brief Constructs a Value from a literal.
+   * @brief Constructs a Value from a literal. The type of the Value is inferred
+   * from the literal.
    * @tparam T The type of the literal.
    * @param value The literal value.
    */
   template <DataType T>
   Value(T value)
       : Value(Value(Type::VOID, std::to_string(value)).cast(getType<T>())) {}
+
+  // 64-bit integer literals (which are "default" on 64-bit host systems) are
+  // converted to 32-bit, so that the user does not need to write `(uint32_t)1`
+  // everywhere. Consequently, it is currently not possible to create a 64-bit
+  // integer Value.
+  Value(int64_t value) : Value(static_cast<int32_t>(value)) {
+    if (value != static_cast<int64_t>(static_cast<int32_t>(value))) {
+      throw std::runtime_error(
+          "Integer overflow while converting this literal to 32-bit integer");
+    }
+  }
+  Value(uint64_t value) : Value(static_cast<uint32_t>(value)) {
+    if (value != static_cast<uint64_t>(static_cast<uint32_t>(value))) {
+      throw std::runtime_error(
+          "Integer overflow while converting this literal to 32-bit unsigned "
+          "integer");
+    }
+  }
 
   /**
    * @brief Gets a void value.
@@ -45,6 +65,13 @@ class Value {
    * @return A new Value with the casted type.
    */
   Value cast(TypeRef type);
+
+  /**
+   * @brief Reinterprets the value as a different type.
+   * @param type The type to reinterpret as.
+   * @return A new Value with the reinterpreted type.
+   */
+  Value reinterpretCast(TypeRef type);
 
   /// ------------------ Functions ------------------
   /// These are the functions that may be implemented by a type.
@@ -79,26 +106,34 @@ class Value {
 class Variable : public Value {
  public:
   using Value::operator=;
-  using Value::Value;
 
   /**
-   * @brief Constructs a Variable with a given type.
+   * @brief Constructs a non-const Variable with a given type.
    * @param type The type of the variable.
    */
-  Variable(TypeRef type);
+  explicit Variable(TypeRef type, CTypeQualifiers qualifiers = {});
 
   /**
    * @brief Constructs a Variable with a given type and initializer.
    * @param type The type of the variable.
    * @param initializer The initializer Value.
    */
-  Variable(TypeRef type, Value initializer);
+  Variable(TypeRef type, Value initializer, CTypeQualifiers qualifiers = {});
 
   /**
    * @brief Constructs a Variable from an initializer Value.
    * @param initializer The initializer Value.
    */
-  Variable(Value initializer);
+  Variable(Value initializer, CTypeQualifiers qualifiers = {});
+
+  /**
+   * @brief Constructs a Variable with a given initial literal value.
+   * @tparam T The type of the literal.
+   * @param value The literal value.
+   */
+  template <DataType T>
+  Variable(T value, CTypeQualifiers qualifiers = {})
+      : Variable(Value(value), qualifiers) {}
 };
 
 /**
@@ -112,14 +147,15 @@ class MemberVariable : public Value {
    * @brief Constructs a MemberVariable with a given type.
    * @param type The type of the member variable.
    */
-  MemberVariable(TypeRef type);
+  MemberVariable(TypeRef type, CTypeQualifiers qualifiers = {});
 
   /**
    * @brief Constructs a MemberVariable with a given type and initializer.
    * @param type The type of the member variable.
    * @param initializer The initializer Value.
    */
-  MemberVariable(TypeRef type, Value initializer);
+  MemberVariable(TypeRef type, Value initializer,
+                 CTypeQualifiers qualifiers = {});
 
   /**
    * @brief Emits the declaration of the member variable.
@@ -128,6 +164,7 @@ class MemberVariable : public Value {
 
  private:
   std::optional<Value> initializer_;
+  CTypeQualifiers qualifiers_;
 };
 
 /**

@@ -1,33 +1,39 @@
 #include "libgraphene/matrix/host/details/HostMatrixBase.hpp"
 
+#include "libgraphene/common/Shape.hpp"
+#include "libgraphene/common/TileMapping.hpp"
+#include "libgraphene/dsl/tensor/HostTensor.hpp"
+
 namespace graphene::matrix::host {
-template <DataType Type>
-std::tuple<poplar::Graph::TileToTensorMapping, std::vector<size_t>>
-HostMatrixBase<Type>::getVectorTileMappingAndShape(bool withHalo) const {
-  // Calculate the tile mapping and the number of rows. The number of rows may
-  // differ from vector.size() if halo cells are included.
+DistributedShape HostMatrixBase::getVectorShape(bool withHalo,
+                                                size_t width) const {
+  FirstDimDistribution firstDimDistribution;
+  firstDimDistribution.reserve(tileLayout_.back().tileId);
   size_t numRows = 0;
-  size_t numElements = 0;
-  poplar::Graph::TileToTensorMapping mapping(tileLayout_.size());
   for (const auto &tile : tileLayout_) {
     size_t rowsOnThisTile = 0;
     rowsOnThisTile += tile.numInteriorRows();
     rowsOnThisTile += tile.numSeperatorRows();
     if (withHalo) rowsOnThisTile += tile.numHaloRows();
-    mapping[tile.tileId].emplace_back(numElements,
-                                      numElements + rowsOnThisTile);
-    numElements += rowsOnThisTile;
+    firstDimDistribution[tile.tileId] = rowsOnThisTile;
     numRows += rowsOnThisTile;
   }
 
-  return {mapping, {numRows}};
+  TensorShape globalShape = {numRows};
+  if (width > 0) {
+    globalShape.push_back(width);
+  }
+  DistributedShape shape =
+      DistributedShape::onTiles(globalShape, firstDimDistribution);
+  return shape;
 }
 
 template <DataType Type>
-HostTensor<Type> HostMatrixBase<Type>::decomposeVector(
-    const std::vector<Type> &vector, bool includeHaloCells,
-    std::string name) const {
-  auto [mapping, shape] = getVectorTileMappingAndShape(includeHaloCells);
+HostTensor HostMatrixBase::decomposeVector(const std::vector<Type> &vector,
+                                           bool includeHaloCells,
+                                           TypeRef destType,
+                                           std::string name) const {
+  auto shape = getVectorShape(includeHaloCells);
 
   // Decompose the vector
   std::vector<Type> decomposedVector;
@@ -42,27 +48,32 @@ HostTensor<Type> HostMatrixBase<Type>::decomposeVector(
     }
   }
 
-  return HostTensor<Type>(std::move(decomposedVector), std::move(shape),
-                          std::move(mapping), std::move(name));
+  TileMapping mapping = TileMapping::linearMappingWithShape(shape);
+  return HostTensor::createPersistent(std::move(decomposedVector),
+                                      std::move(shape), std::move(mapping),
+                                      std::move(name));
 }
-
-template <DataType Type>
-HostTensor<Type> HostMatrixBase<Type>::loadVectorFromFile(
-    std::string fileName, bool withHalo, std::string name) const {
+HostTensor HostMatrixBase::loadVectorFromFile(TypeRef type,
+                                              std::string fileName,
+                                              bool withHalo,
+                                              std::string name) const {
   GRAPHENE_TRACEPOINT();
-  DoubletVector<Type> vector = loadDoubletVectorFromFile<Type>(fileName);
+  assert(type->isFloat() && "Only float types are supported");
 
-  // Convert the doublet vector to a contiguous vector. This is necessary
-  // because a doublet vector is not guaranteed to be sorted by index and may
-  // contain missing indices.
-  std::vector<Type> contiguousValues(vector.nrows);
-  for (size_t i = 0; i < vector.values.size(); i++) {
-    contiguousValues[vector.indices[i]] = vector.values[i];
-  }
+  return typeSwitch(type, [&]<FloatDataType Type>() -> HostTensor {
+    DoubletVector<Type> vector = loadDoubletVectorFromFile<Type>(fileName);
 
-  return decomposeVector(contiguousValues, withHalo, name);
+    // Convert the doublet vector to a contiguous vector. This is necessary
+    // because a doublet vector is not guaranteed to be sorted by index and
+    // may contain missing indices.
+    std::vector<Type> contiguousValues(vector.nrows);
+    for (size_t i = 0; i < vector.values.size(); i++) {
+      contiguousValues[vector.indices[i]] = vector.values[i];
+    }
+
+    HostTensor tensor = decomposeVector(contiguousValues, withHalo, type, name);
+    return tensor;
+  });
 }
 
-// Template instantiations
-template class HostMatrixBase<float>;
 }  // namespace graphene::matrix::host

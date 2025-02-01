@@ -11,7 +11,7 @@
 
 namespace graphene::matrix::host {
 
-template <DataType Type>
+template <FloatDataType Type>
 TripletMatrix<Type> loadTripletMatrixFromFile(std::filesystem::path path) {
   GRAPHENE_TRACEPOINT();
   spdlog::info("Loading COO matrix from {}", path.string());
@@ -45,7 +45,7 @@ TripletMatrix<Type> loadTripletMatrixFromFile(std::filesystem::path path) {
   return coo;
 }
 
-template <DataType Type>
+template <FloatDataType Type>
 DoubletVector<Type> loadDoubletVectorFromFile(std::filesystem::path path) {
   GRAPHENE_TRACEPOINT();
   spdlog::info("Loading COO vector from {}", path.string());
@@ -87,8 +87,41 @@ DoubletVector<Type> loadDoubletVectorFromFile(std::filesystem::path path) {
   return vector;
 }
 
+template <>
+DoubletVector<doubleword> loadDoubletVectorFromFile(
+    std::filesystem::path path) {
+  DoubletVector<double> doubleVector = loadDoubletVectorFromFile<double>(path);
+  DoubletVector<doubleword> doublewordVector;
+  doublewordVector.nrows = doubleVector.nrows;
+  doublewordVector.indices = std::move(doubleVector.indices);
+  doublewordVector.values.reserve(doubleVector.values.size());
+  for (auto val : doubleVector.values) {
+    doublewordVector.values.push_back(doubleword::from(val));
+  }
+  return doublewordVector;
+}
+
+template <>
+TripletMatrix<doubleword> loadTripletMatrixFromFile(
+    std::filesystem::path path) {
+  TripletMatrix<double> doubleMatrix = loadTripletMatrixFromFile<double>(path);
+  TripletMatrix<doubleword> doublewordMatrix;
+  doublewordMatrix.ncols = doubleMatrix.ncols;
+  doublewordMatrix.nrows = doubleMatrix.nrows;
+  doublewordMatrix.entries.reserve(doubleMatrix.entries.size());
+  for (auto entry : doubleMatrix.entries) {
+    doublewordMatrix.entries.push_back(
+        {entry.row, entry.col, doubleword::from(entry.val)});
+  }
+  return doublewordMatrix;
+}
+
 template TripletMatrix<float> loadTripletMatrixFromFile(
     std::filesystem::path path);
 template DoubletVector<float> loadDoubletVectorFromFile(
+    std::filesystem::path path);
+template TripletMatrix<double> loadTripletMatrixFromFile(
+    std::filesystem::path path);
+template DoubletVector<double> loadDoubletVectorFromFile(
     std::filesystem::path path);
 }  // namespace graphene::matrix::host

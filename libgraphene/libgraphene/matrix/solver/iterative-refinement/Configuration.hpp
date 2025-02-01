@@ -3,6 +3,7 @@
 #include <limits>
 #include <nlohmann/json_fwd.hpp>
 
+#include "libgraphene/common/Type.hpp"
 #include "libgraphene/matrix/Norm.hpp"
 #include "libgraphene/matrix/solver/Configuration.hpp"
 
@@ -20,8 +21,8 @@ struct Configuration : solver::Configuration,
   VectorNorm norm = VectorNorm::L2;
 
   std::shared_ptr<solver::Configuration> innerSolver;
-  bool mixedPrecision = false;
-  bool useDoubleWordArithmetic = false;
+
+  TypeRef extendedPrecisionType = nullptr;
 
   Configuration() = default;
   Configuration(nlohmann::json const& config);
