@@ -48,6 +48,11 @@ void If(Value cond, std::function<void()> thenDo,
 void Break();
 
 /**
+ * @brief Represents a continue statement in the CodeDSL language.
+ */
+void Continue();
+
+/**
  * @brief Represents a while loop in the CodeDSL language.
  * @param cond The loop condition Value.
  * @param body The function representing the loop body.

@@ -22,6 +22,7 @@
 #include "libgraphene/matrix/details/crs/CRSAddressing.hpp"
 #include "libgraphene/matrix/host/HostMatrix.hpp"
 #include "libgraphene/matrix/host/TileLayout.hpp"
+#include "libgraphene/matrix/host/details/CoordinateFormat.hpp"
 #include "libgraphene/matrix/host/details/MatrixMarket.hpp"
 #include "libgraphene/util/Tracepoint.hpp"
 #include "libtwofloat/operators.hpp"
@@ -129,7 +130,8 @@ CRSHostMatrix::CRSHostMatrix(TripletMatrix<Type> tripletMatrix, size_t numTiles,
 
   this->globalAddressing_ = std::move(globalAddressing);
   this->partitioning_ = std::move(
-      calculatePartitioning(numTiles, globalMatrixValues, globalAddressing_));
+      calculatePartitioning(numTiles_, globalMatrixValues, globalAddressing_));
+
   this->tileLayout_ =
       std::move(calculateTileLayouts(this->partitioning_, globalAddressing_));
   this->localAddressings_ =
@@ -195,12 +197,10 @@ CRSHostMatrix::convertToCRS(TripletMatrix<Type> tripletMatrix) {
 
 template <FloatDataType Type>
 Partitioning CRSHostMatrix::calculatePartitioning(
-    size_t numTiles, const CRSMatrixValues<Type> &matrixValues,
+    size_t &numTiles, const CRSMatrixValues<Type> &matrixValues,
     const CRSAddressing &addressing) {
   GRAPHENE_TRACEPOINT();
   spdlog::info("Distributing matrix to {} processors", numTiles);
-
-  Partitioning partitioning;
 
   // number of vertices
   idx_t nvtxs = (idx_t)addressing.rowPtr.size() - 1;
@@ -209,6 +209,9 @@ Partitioning CRSHostMatrix::calculatePartitioning(
   idx_t nparts = (idx_t)numTiles;
   if (nparts == 1) {
     spdlog::warn("Only one processor, skipping matrix partitioning");
+    Partitioning partitioning;
+    partitioning.numTiles = 1;
+    numTiles = 1;
     partitioning.rowToTile.resize(nvtxs, 0);
     return partitioning;
   }
@@ -288,10 +291,40 @@ Partitioning CRSHostMatrix::calculatePartitioning(
 
   spdlog::trace("Total edgecut after partitioning: {}", edgecut);
 
-  // Copy partitioning to the output
+  /// When the number of requested tiles is large compared to the matrix, some
+  /// tiles might end up empty. We need to shift the partitioning to remove
+  /// these empty tiles.
+  std::vector<size_t> verticesPerProc(numTiles, 0);
+  for (size_t i = 0; i < nvtxs; i++) {
+    verticesPerProc[part[i]]++;
+  }
+
+  size_t numEmptyProcs = 0;
+
+  // For each proc, the mapping from the original proc id to the shifted proc
+  // id
+  std::vector<ssize_t> procToShiftedProcMapping(numTiles);
+  for (size_t i = 0; i < numTiles; i++) {
+    if (verticesPerProc[i] == 0) {
+      numEmptyProcs++;
+      procToShiftedProcMapping[i] = -1;
+      continue;
+    }
+    procToShiftedProcMapping[i] = i - numEmptyProcs;
+  }
+  numTiles = numTiles - numEmptyProcs;
+
+  // Copy partitioning to the output, accounting for empty processors
+  Partitioning partitioning;
+  partitioning.numTiles = numTiles;
   partitioning.rowToTile.reserve(nvtxs);
-  std::copy(part.begin(), part.end(),
-            std::back_inserter(partitioning.rowToTile));
+  for (size_t i = 0; i < nvtxs; i++) {
+    partitioning.rowToTile.push_back(procToShiftedProcMapping[part[i]]);
+  }
+  spdlog::info(
+      "Tried to partition matrix to {} procs. Resulted in {} non-empty "
+      "partitions.",
+      numTiles + numEmptyProcs, numTiles);
 
   return partitioning;
 }

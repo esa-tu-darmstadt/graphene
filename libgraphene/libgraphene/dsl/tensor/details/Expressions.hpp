@@ -47,6 +47,7 @@ class ExpressionBase {
   virtual std::string getAsString() const = 0;
   virtual DistributedShape shape() const = 0;
   virtual TileMapping tileMapping() const = 0;
+  virtual size_t hash() const = 0;
 
   virtual std::unique_ptr<ExpressionBase> clone() const = 0;
 
@@ -69,6 +70,7 @@ class UnaryExpr : public ExpressionBase {
   std::string getAsString() const override;
   DistributedShape shape() const override;
   TileMapping tileMapping() const override;
+  size_t hash() const override;
 
   std::unique_ptr<ExpressionBase> clone() const override;
 
@@ -94,6 +96,7 @@ class BinaryExpr : public ExpressionBase {
   std::string getAsString() const override;
   DistributedShape shape() const override;
   TileMapping tileMapping() const override;
+  size_t hash() const override;
 
   std::unique_ptr<ExpressionBase> clone() const override;
 
@@ -116,6 +119,7 @@ class InputExpr : public ExpressionBase {
   std::string getAsString() const override;
   DistributedShape shape() const override;
   TileMapping tileMapping() const override;
+  size_t hash() const override;
 
   std::unique_ptr<ExpressionBase> clone() const override;
 
@@ -136,6 +140,7 @@ class CastExpr : public ExpressionBase {
   std::string getAsString() const override;
   DistributedShape shape() const override;
   TileMapping tileMapping() const override;
+  size_t hash() const override;
 
   std::unique_ptr<ExpressionBase> clone() const override;
 
@@ -172,6 +177,7 @@ class ConstExpr : public ExpressionBase {
   std::string getAsString() const override;
   DistributedShape shape() const override;
   TileMapping tileMapping() const override;
+  size_t hash() const override;
 
   std::unique_ptr<ExpressionBase> clone() const override;
 
@@ -195,6 +201,7 @@ class PermuteExpr : public ExpressionBase {
   std::string getAsString() const override;
   DistributedShape shape() const override;
   TileMapping tileMapping() const override;
+  size_t hash() const override;
 
   std::unique_ptr<ExpressionBase> clone() const override;
 
@@ -216,6 +223,7 @@ class BroadcastExpr : public ExpressionBase {
   std::string getAsString() const override;
   DistributedShape shape() const override;
   TileMapping tileMapping() const override;
+  size_t hash() const override;
 
   std::unique_ptr<ExpressionBase> clone() const override;
 

@@ -6,6 +6,7 @@
 #include <poplar/GraphElements.hpp>
 
 #include "CodeGen.hpp"
+#include "libgraphene/common/Type.hpp"
 
 namespace graphene::codedsl {
 
@@ -65,35 +66,43 @@ Value::Value(TypeRef type, std::string expr, bool isAssignable)
       type_(std::move(type)),
       isAssignable_(isAssignable) {}
 
-Variable::Variable(TypeRef type)
+Variable::Variable(TypeRef type, CTypeQualifiers qualifiers)
     : Value(type,
             CodeGen::emitVariableDeclaration(
-                type, CodeGen::generateVariableName(), /*isConst=*/false),
-            true) {}
+                type, CodeGen::generateVariableName(), qualifiers),
+            true) {
+  if (qualifiers.Const) {
+    throw std::runtime_error(
+        "Variable with const qualifier must have an initializer");
+  }
+}
 
-Variable::Variable(TypeRef type, Value initializer, bool isConst)
+Variable::Variable(TypeRef type, Value initializer, CTypeQualifiers qualifiers)
     : Value(type,
             CodeGen::emitVariableDeclaration(type,
                                              CodeGen::generateVariableName(),
-                                             isConst, initializer.expr()),
-            !isConst) {}
+                                             qualifiers, initializer.expr()),
+            !qualifiers.Const) {}
 
-Variable::Variable(Value initializer, bool isConst)
-    : Variable(initializer.type(), initializer, isConst) {}
+Variable::Variable(Value initializer, CTypeQualifiers qualifiers)
+    : Variable(initializer.type(), initializer, qualifiers) {}
 
-MemberVariable::MemberVariable(TypeRef type)
-    : Value(type, CodeGen::generateVariableName(), true) {}
-
-MemberVariable::MemberVariable(TypeRef type, Value initializer)
+MemberVariable::MemberVariable(TypeRef type, CTypeQualifiers qualifiers)
     : Value(type, CodeGen::generateVariableName(), true),
-      initializer_(initializer) {}
+      qualifiers_(qualifiers) {}
+
+MemberVariable::MemberVariable(TypeRef type, Value initializer,
+                               CTypeQualifiers qualifiers)
+    : Value(type, CodeGen::generateVariableName(), true),
+      initializer_(initializer),
+      qualifiers_(qualifiers) {}
 
 void MemberVariable::declare() const {
   if (initializer_) {
-    CodeGen::emitVariableDeclaration(type(), expr(),
-                                     /*isConst=*/false, initializer_->expr());
+    CodeGen::emitVariableDeclaration(type(), expr(), qualifiers_,
+                                     initializer_->expr());
   } else {
-    CodeGen::emitVariableDeclaration(type(), expr(), /*isConst=*/false);
+    CodeGen::emitVariableDeclaration(type(), expr(), qualifiers_);
   }
 }
 

@@ -5,6 +5,7 @@
 #include <string>
 
 #include "libgraphene/common/Concepts.hpp"
+#include "libgraphene/common/Hash.hpp"
 #include "libgraphene/common/TileMapping.hpp"
 #include "libgraphene/dsl/common/details/Expressions.hpp"
 #include "libgraphene/dsl/tensor/Expression.hpp"
@@ -47,6 +48,10 @@ std::unique_ptr<ExpressionBase> UnaryExpr::clone() const {
 
 std::any UnaryExpr::accept(ExpressionVisitor& visitor, std::any arg) {
   return visitor.visit(*this, arg);
+}
+
+size_t UnaryExpr::hash() const {
+  return graphene::hash("unary", type(), op_, arg_->hash());
 }
 
 //--------------------------------------------------------------------------
@@ -96,6 +101,10 @@ std::any BinaryExpr::accept(ExpressionVisitor& visitor, std::any arg) {
   return visitor.visit(*this, arg);
 }
 
+size_t BinaryExpr::hash() const {
+  return graphene::hash("binary", type(), op_, lhs_->hash(), rhs_->hash());
+}
+
 //--------------------------------------------------------------------------
 // InputExpr implementation
 //--------------------------------------------------------------------------
@@ -111,11 +120,7 @@ std::string InputExpr::getName() const { return "input"; }
 
 std::string InputExpr::getAsString() const {
   std::stringstream ss;
-  ss << "input<";
-  for (size_t dim : shape().globalShape()) {
-    ss << dim << "x";
-  }
-  ss << type()->str() << ">";
+  ss << "input<" << shape().globalShape().str() << ", " << type()->str() << ">";
   return ss.str();
 }
 
@@ -135,7 +140,13 @@ std::any InputExpr::accept(ExpressionVisitor& visitor, std::any arg) {
   return visitor.visit(*this, arg);
 }
 
+size_t InputExpr::hash() const {
+  return graphene::hash("input", type(), shape());
+}
+
+//--------------------------------------------------------------------------
 // CastExpr implementation
+//--------------------------------------------------------------------------
 CastExpr::CastExpr(std::unique_ptr<ExpressionBase> arg, TypeRef type)
     : ExpressionBase(type), arg_(std::move(arg)) {}
 
@@ -156,6 +167,10 @@ std::unique_ptr<ExpressionBase> CastExpr::clone() const {
 
 std::any CastExpr::accept(ExpressionVisitor& visitor, std::any arg) {
   return visitor.visit(*this, arg);
+}
+
+size_t CastExpr::hash() const {
+  return graphene::hash("cast", type(), arg_->hash());
 }
 
 //--------------------------------------------------------------------------
@@ -201,7 +216,18 @@ std::string floatToString(doubleword value) {
      << value.l << "}";
   return ss.str();
 }
+
 }  // namespace
+
+/// Constructor for floating point types
+ConstExpr::ConstExpr(float value)
+    : ConstExpr(value, floatToString(value), Type::FLOAT32) {}
+ConstExpr::ConstExpr(double value)
+    : ConstExpr(value, floatToString(value), Type::FLOAT64) {}
+ConstExpr::ConstExpr(doubleword value)
+    : ConstExpr(value, floatToString(value), Type::TWOFLOAT32) {}
+
+size_t ConstExpr::hash() const { return graphene::hash("const", type(), str_); }
 
 //--------------------------------------------------------------------------
 // PermuteExpr implementation
@@ -261,13 +287,9 @@ std::any PermuteExpr::accept(ExpressionVisitor& visitor, std::any arg) {
   return visitor.visit(*this, arg);
 }
 
-/// Constructor for floating point types
-ConstExpr::ConstExpr(float value)
-    : ConstExpr(value, floatToString(value), Type::FLOAT32) {}
-ConstExpr::ConstExpr(double value)
-    : ConstExpr(value, floatToString(value), Type::FLOAT64) {}
-ConstExpr::ConstExpr(doubleword value)
-    : ConstExpr(value, floatToString(value), Type::TWOFLOAT32) {}
+size_t PermuteExpr::hash() const {
+  return graphene::hash("permute", permutation_, arg_->hash());
+}
 
 // -----------------------------------------------------------------------
 // BroadcastExpr implementation
@@ -312,6 +334,10 @@ std::unique_ptr<ExpressionBase> BroadcastExpr::clone() const {
 
 std::any BroadcastExpr::accept(ExpressionVisitor& visitor, std::any arg) {
   return visitor.visit(*this, arg);
+}
+
+size_t BroadcastExpr::hash() const {
+  return graphene::hash("broadcast", shape_, arg_->hash());
 }
 
 //--------------------------------------------------------------------------

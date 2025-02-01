@@ -18,12 +18,34 @@
 #include "libgraphene/common/Traits.hpp"
 #include "libgraphene/util/Context.hpp"
 #include "libgraphene/util/Tracepoint.hpp"
+#include "libgraphene/util/VertexCache.hpp"
 #include "poplar/DeviceManager.hpp"
 #include "poplar/Graph.hpp"
 #include "poplar/Program.hpp"
 #include "poplar/StreamCallback.hpp"
 
 using namespace graphene;
+
+namespace {
+std::filesystem::path findRuntimeLib(std::string defaultPath,
+                                     std::string envVarName) {
+  std::filesystem::path runtimeLibPath;
+  if (getenv(envVarName.c_str()) != nullptr) {
+    runtimeLibPath = std::filesystem::path(getenv(envVarName.c_str()));
+    spdlog::trace(
+        "Setting runtime library path due to the {} environment "
+        "variable to {}",
+        envVarName, runtimeLibPath.string());
+  } else {
+    runtimeLibPath = std::filesystem::path(defaultPath);
+  }
+  if (!std::filesystem::exists(runtimeLibPath)) {
+    throw std::runtime_error("Could not find runtime library at " +
+                             runtimeLibPath.string());
+  }
+  return runtimeLibPath;
+}
+}  // namespace
 
 Runtime *Runtime::instance_ = nullptr;
 
@@ -32,21 +54,15 @@ Runtime::Runtime(size_t numIPUs, std::filesystem::path expressionStorageDir)
   assert(instance_ == nullptr && "Runtime already registered");
   instance_ = this;
 
-  // Setup the libtwofloat include directory
-  twoFloatSourceDir_ = std::filesystem::path(LIBTWOFLOAT_INCLUDE_DIR);
-  if (getenv("LIBTWOFLOAT_INCLUDE") != nullptr) {
-    twoFloatSourceDir_ = std::filesystem::path(getenv("LIBTWOFLOAT_INCLUDE"));
-    spdlog::info(
-        "Setting libtwofloat include directory due to the "
-        "LIBTWOFLOAT_INCLUDE environment variable to {}",
-        twoFloatSourceDir_.string());
-  }
-  if (!std::filesystem::exists(twoFloatSourceDir_ /
-                               "libtwofloat/twofloat.hpp")) {
-    throw std::runtime_error(
-        "Could not find libtwofloat include directory. Set it using the "
-        "LIBTWOFLOAT_INCLUDE environment variable");
-  }
+  // Setup the runtime library paths
+  twoFloatSourceDir_ =
+      findRuntimeLib(LIBTWOFLOAT_INCLUDE_DIR, "LIBTWOFLOAT_INCLUDE");
+  spdlog::debug("TwoFloat library include directory: {}",
+                twoFloatSourceDir_.string());
+  ipuThreadSyncSourceDir_ =
+      findRuntimeLib(LIBIPUTHREADSYNC_INCLUDE_DIR, "LIBIPUTHREADSYNC_INCLUDE");
+  spdlog::debug("IpuThreadSync library include directory: {}",
+                ipuThreadSyncSourceDir_.string());
 
   // Setup the expression storage directory
   if (getenv("EXPRESSION_STORAGE_DIR") != nullptr) {
@@ -65,9 +81,10 @@ Runtime::Runtime(size_t numIPUs, std::filesystem::path expressionStorageDir)
                 expressionStorageDir_.string());
 
   // Setup expression dumping options
-  if (getenv("EXPRESSION_DUMP_ASM") != nullptr) dumpExpressionAsm_ = true;
+  // if (getenv("EXPRESSION_DUMP_ASM") != nullptr) dumpExpressionAsm_ = true;
   if (getenv("EXPRESSION_DUMP_IR") != nullptr) dumpExpressionIR_ = true;
 
+  VertexCache::initCache(expressionStorageDir_);
   init(numIPUs);
 }
 Runtime::~Runtime() { instance_ = nullptr; }
@@ -260,4 +277,13 @@ std::string Runtime::getCurrentExecutionTime() const {
         "This function is only available during execution");
   auto currentTime = engine_->getTimeStamp();
   return engine_->reportTiming(executionStartTime_, currentTime);
+}
+
+std::filesystem::path Runtime::getRuntimeLibIncludeDir(RuntimeLib lib) const {
+  switch (lib) {
+    case RuntimeLib::TwoFloat:
+      return twoFloatSourceDir_;
+    case RuntimeLib::IpuThreadSync:
+      return ipuThreadSyncSourceDir_;
+  }
 }

@@ -4,6 +4,7 @@
 
 #include <poputil/VertexTemplates.hpp>
 
+#include "libgraphene/dsl/code/ControlFlow.hpp"
 #include "libgraphene/dsl/code/Operators.hpp"
 #include "libgraphene/dsl/tensor/ControlFlow.hpp"
 #include "libgraphene/dsl/tensor/Execute.hpp"
@@ -59,7 +60,7 @@ void Solver::solveIterationCSR(Tensor& x, Tensor& b) const {
                 offDiag[j].cast(workingType) * x[colInd[j]].cast(workingType);
           });
           Value newX = (sum / diag[i].cast(workingType));
-          x[i] = newX.cast(x.type());
+          x[i] = newX.cast(x[0].type());
         });
       },
       InOut(x), In(b), In(A.addressing->rowPtr), In(A.addressing->colInd),

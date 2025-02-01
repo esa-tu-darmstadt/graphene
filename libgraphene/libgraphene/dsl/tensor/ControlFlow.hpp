@@ -37,7 +37,7 @@ void Repeat(int count, std::function<void()> body);
  * @brief Measures the time taken to execute a block of code.
  *
  * @param body The block of code to execute.
- * @param tile The tile to execute the code on.
+ * @param tile The tile on which the program is timed.
  * @return A uint32_t scalar tensor storing the cycle count taken to execute the
  * block of code.
  */
@@ -48,7 +48,7 @@ Tensor Time(std::function<void()> body, size_t tile);
  * result of the block of code.
  *
  * @param body The block of code to execute.
- * @param tile The tile to execute the code on.
+ * @param tile The tile on which the program is timed.
  * @return A tuple containing the return value of the block of code and the
  * cycle count taken to execute the block of code.
  */

@@ -16,6 +16,7 @@
 #include "libgraphene/dsl/tensor/Expression.hpp"
 #include "libgraphene/dsl/tensor/HostTensor.hpp"
 #include "libgraphene/dsl/tensor/Operators.hpp"
+#include "libgraphene/dsl/tensor/PrintTensorFormat.hpp"
 #include "libgraphene/dsl/tensor/RemoteTensor.hpp"
 #include "libgraphene/dsl/tensor/details/Expressions.hpp"
 #include "libgraphene/matrix/Norm.hpp"
@@ -218,13 +219,18 @@ namespace {
 /// first element of the given dimension, in number of elements (not number of
 /// bytes)
 void printTensorRecursive(std::ostream &stream, const uint8_t *data,
-                          TypeRef type, const DistributedShape &shape,
-                          size_t dim, size_t offset, std::string indent = "") {
+                          TypeRef type, const TensorShape &shape, size_t dim,
+                          size_t offset, const PrintTensorFormat &fmt,
+                          const std::vector<bool> &dimsToSummarize,
+                          std::string indent = "") {
   // If we are at the last dimension, print the values
   if (dim == shape.rank() - 1) {
     stream << indent << "[";
     for (size_t i = 0; i < shape[dim]; ++i) {
       if (i > 0) stream << ", ";
+      if (dimsToSummarize[dim] && i == fmt.edgeItems) {
+        stream << "..., ";
+      }
       size_t byteOffset = (offset + i) * type->size();
       type->prettyPrintValue(data + byteOffset, stream);
     }
@@ -236,15 +242,20 @@ void printTensorRecursive(std::ostream &stream, const uint8_t *data,
   stream << indent << "[" << std::endl;
   for (size_t i = 0; i < shape[dim]; ++i) {
     if (i > 0) stream << "\n";
+    if (dimsToSummarize[dim] && i == fmt.edgeItems) {
+      stream << indent << "  "
+             << "..." << std::endl;
+    }
+
     size_t subOffset = offset + i * shape.stride(dim);
-    printTensorRecursive(stream, data, type, shape, dim + 1, subOffset,
-                         indent + "  ");
+    printTensorRecursive(stream, data, type, shape, dim + 1, subOffset, fmt,
+                         dimsToSummarize, indent + "  ");
   }
   stream << std::endl << indent << "]";
 }
 }  // namespace
 
-void Tensor::print(std::string name, poplar::PrintTensorFmt fmt,
+void Tensor::print(std::string name, PrintTensorFormat fmt,
                    std::ostream &stream) const {
   DebugInfo di("Tensor", DI_ARGS(name));
   if (name.empty()) name = "<unnamed>";
@@ -257,23 +268,57 @@ void Tensor::print(std::string name, poplar::PrintTensorFmt fmt,
 
   std::string handle = runtime.registerHandle("PrintTensor");
   poplar::Type poplarType = type()->poplarEquivalentType()->poplarType();
-  size_t numElementsToPrint = tensor().numElements();
 
-  auto func =
-      graph.addHostFunction(handle, {{poplarType, numElementsToPrint}}, {});
+  poplar::Tensor tensorToPrint = tensor();
+  TensorShape summarizedShape = shape().globalShape();
+  std::vector<bool> dimsToSummarize(shape().rank(), false);
+
+  // Slice away what isnt printed due to summarisation so that it isnt copied
+  // to the host
+  for (size_t i = 0; i < shape().rank(); ++i) {
+    if (shape()[i] > fmt.summariseThreshold) {
+      tensorToPrint = poplar::concat(
+          tensorToPrint.slice(0, fmt.edgeItems, i),
+          tensorToPrint.slice(shape()[i] - fmt.edgeItems, shape()[i], i), i);
+      summarizedShape[i] = fmt.edgeItems * 2;
+      dimsToSummarize[i] = true;
+    }
+  }
+
+  auto func = graph.addHostFunction(
+      handle, {{poplarType, summarizedShape.numElements()}}, {});
 
   runtime.registerHostFunction(
-      handle, [shape = shape(), name = name, type = type(), &stream](
-                  poplar::ArrayRef<const void *> ins,
-                  poplar::ArrayRef<void *> /*outs*/) {
-        stream << "tensor<" << shape.str() << "x" << type->str() << "> " << name
-               << " = ";
+      handle, [summarizedShape, originalShape = shape().globalShape(),
+               name = name, type = type(), fmt, dimsToSummarize,
+               &stream](poplar::ArrayRef<const void *> ins,
+                        poplar::ArrayRef<void *> /*outs*/) {
+        stream << "tensor<" << originalShape.str() << "x" << type->str() << "> "
+               << name << " = ";
+        switch (fmt.floatFormat) {
+          case PrintTensorFormat::FloatFormat::Auto:
+            stream << std::defaultfloat;
+            break;
+          case PrintTensorFormat::FloatFormat::Fixed:
+            stream << std::fixed;
+            break;
+          case PrintTensorFormat::FloatFormat::Scientific:
+            stream << std::scientific;
+            break;
+          case PrintTensorFormat::FloatFormat::HexFloat:
+            stream << std::hexfloat;
+            break;
+        }
+        auto oldprecision = stream.precision(fmt.precision);
+
         printTensorRecursive(stream, reinterpret_cast<const uint8_t *>(ins[0]),
-                             type, shape, 0, 0, "");
-        stream << std::endl;
+                             type, summarizedShape, 0, 0, fmt, dimsToSummarize,
+                             "");
+        stream << std::endl << std::defaultfloat;
+        stream.precision(oldprecision);
       });
 
-  program.add(poplar::program::Call(func, {tensor()}, {}, di));
+  program.add(poplar::program::Call(func, {tensorToPrint}, {}, di));
 }
 
 void Tensor::copyToHost(

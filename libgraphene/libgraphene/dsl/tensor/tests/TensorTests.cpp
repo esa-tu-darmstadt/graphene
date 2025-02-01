@@ -5,6 +5,7 @@
 #include "libgraphene/common/Shape.hpp"
 #include "libgraphene/common/TileMapping.hpp"
 #include "libgraphene/dsl/tensor/HostTensor.hpp"
+#include "libgraphene/dsl/tensor/PrintTensorFormat.hpp"
 #include "libgraphene/dsl/tensor/RemoteTensor.hpp"
 #include "libgraphene/dsl/tensor/Tensor.hpp"
 #include "libgraphene/util/Runtime.hpp"
@@ -57,14 +58,27 @@ TEST_F(TensorTest, RemoteCopy) {
 
 TEST_F(TensorTest, Print) {
   Runtime runtime(1);
-  std::stringstream ss;
+  std::stringstream ss1;
+  std::stringstream ss2;
+  std::stringstream ss3;
   HostTensor host1 = createHostTensor<float>(
       DistributedShape::createLinearlyDistributed({8, 2}, 4), Type::FLOAT32);
   RemoteTensor remote1 = host1.copyToRemote();
-  Tensor tensor = remote1.copyToTile();
-  tensor.print("tensor", {}, ss);
+  Tensor tensor1 = remote1.copyToTile();
+  HostTensor host2 = createHostTensor<float>(
+      DistributedShape::createLinearlyDistributed({3, 3}, 2), Type::FLOAT32);
+  RemoteTensor remote2 = host2.copyToRemote();
+  Tensor tensor2 = remote2.copyToTile();
 
-  std::string expected = R"(tensor<8x2xfloat> tensor = [
+  tensor1.print("tensor", PrintTensorFormat(8), ss1);
+  tensor1.print(
+      "tensor",
+      PrintTensorFormat(5, 0, PrintTensorFormat::FloatFormat::Auto, 2), ss2);
+  tensor2.print(
+      "tensor",
+      PrintTensorFormat(2, 0, PrintTensorFormat::FloatFormat::Auto, 1), ss3);
+
+  std::string expected1 = R"(tensor<8x2xfloat> tensor = [
   [0, 1]
   [2, 3]
   [4, 5]
@@ -76,10 +90,28 @@ TEST_F(TensorTest, Print) {
 ]
 )";
 
+  std::string expected2 = R"(tensor<8x2xfloat> tensor = [
+  [0, 1]
+  [2, 3]
+  ...
+  [12, 13]
+  [14, 15]
+]
+)";
+
+  std::string expected3 = R"(tensor<3x3xfloat> tensor = [
+  [0, ..., 2]
+  ...
+  [6, ..., 8]
+]
+)";
+
   poplar::Engine engine = runtime.compileGraph();
   runtime.loadAndRunEngine(engine);
 
-  EXPECT_EQ(ss.str(), expected);
+  EXPECT_EQ(ss1.str(), expected1);
+  EXPECT_EQ(ss2.str(), expected2);
+  EXPECT_EQ(ss3.str(), expected3);
 }
 
 TEST_F(TensorTest, ReduceAcrossTilesSingleIPU) {

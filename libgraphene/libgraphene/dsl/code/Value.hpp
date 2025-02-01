@@ -111,20 +111,20 @@ class Variable : public Value {
    * @brief Constructs a non-const Variable with a given type.
    * @param type The type of the variable.
    */
-  explicit Variable(TypeRef type);
+  explicit Variable(TypeRef type, CTypeQualifiers qualifiers = {});
 
   /**
    * @brief Constructs a Variable with a given type and initializer.
    * @param type The type of the variable.
    * @param initializer The initializer Value.
    */
-  Variable(TypeRef type, Value initializer, bool isConst = false);
+  Variable(TypeRef type, Value initializer, CTypeQualifiers qualifiers = {});
 
   /**
    * @brief Constructs a Variable from an initializer Value.
    * @param initializer The initializer Value.
    */
-  Variable(Value initializer, bool isConst = false);
+  Variable(Value initializer, CTypeQualifiers qualifiers = {});
 
   /**
    * @brief Constructs a Variable with a given initial literal value.
@@ -132,7 +132,8 @@ class Variable : public Value {
    * @param value The literal value.
    */
   template <DataType T>
-  Variable(T value, bool isConst = false) : Variable(Value(value), isConst) {}
+  Variable(T value, CTypeQualifiers qualifiers = {})
+      : Variable(Value(value), qualifiers) {}
 };
 
 /**
@@ -146,14 +147,15 @@ class MemberVariable : public Value {
    * @brief Constructs a MemberVariable with a given type.
    * @param type The type of the member variable.
    */
-  MemberVariable(TypeRef type);
+  MemberVariable(TypeRef type, CTypeQualifiers qualifiers = {});
 
   /**
    * @brief Constructs a MemberVariable with a given type and initializer.
    * @param type The type of the member variable.
    * @param initializer The initializer Value.
    */
-  MemberVariable(TypeRef type, Value initializer);
+  MemberVariable(TypeRef type, Value initializer,
+                 CTypeQualifiers qualifiers = {});
 
   /**
    * @brief Emits the declaration of the member variable.
@@ -162,6 +164,7 @@ class MemberVariable : public Value {
 
  private:
   std::optional<Value> initializer_;
+  CTypeQualifiers qualifiers_;
 };
 
 /**

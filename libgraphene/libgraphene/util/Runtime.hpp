@@ -64,8 +64,9 @@ class Runtime {
 
   std::filesystem::path expressionStorageDir_;
   std::filesystem::path twoFloatSourceDir_;
+  std::filesystem::path ipuThreadSyncSourceDir_;
 
-  bool dumpExpressionAsm_ = false;
+  bool dumpExpressionAsm_ = true;
   bool dumpExpressionIR_ = false;
 
  public:
@@ -174,10 +175,9 @@ class Runtime {
     return expressionStorageDir_;
   }
 
-  /// \brief Get the path to the include directory of the twofloat library.
-  std::filesystem::path getTwoFloatSourceDir() const {
-    return twoFloatSourceDir_;
-  }
+  enum class RuntimeLib { TwoFloat, IpuThreadSync };
+  /// \brief Get the path to the include directory of the given runtime library
+  std::filesystem::path getRuntimeLibIncludeDir(RuntimeLib lib) const;
 
   std::string getCurrentExecutionTime() const;
 

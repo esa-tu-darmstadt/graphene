@@ -1,137 +1,104 @@
 #pragma once
+#include <poplar/Tensor.hpp>
 #include <vector>
 
 #include "libgraphene/common/Helpers.hpp"
 #include "libgraphene/common/Type.hpp"
-#include "libgraphene/dsl/code/CodeGen.hpp"
 #include "libgraphene/dsl/code/Function.hpp"
 #include "libgraphene/dsl/code/Value.hpp"
 #include "libgraphene/dsl/code/VertexTypes.hpp"
 namespace graphene::codedsl {
+
+enum class VertexKind { Vertex, MultiVertex, SupervisorVertex };
+
 /**
  * @brief Represents a vertex in the CodeDSL language.
  */
 class Vertex {
  public:
-  /**
-   * @brief Constructs and emits a Vertex with a given name, types, directions,
-   * and compute function generator.
-   * @param name The name of the vertex.
-   * @param types The types of the tensors. Must be native Poplar types.
-   * @param directions The directions of the vertex fields (Input, Output,
-   * InOut).
-   * @param computeFunctionGenerator The compute function generator. Must accept
-   * a vector of \ref MemberVariable and return the compute function. The
-   * generated function must be named "compute", accept a single argument (the
-   * worker id) or no argument, and return a boolean.
-   */
-  Vertex(std::string name, std::vector<TypeRef> elementTypes,
-         std::vector<VertexInOutType::Direction> directions,
-         std::function<Function(std::vector<Value>)> computeFunctionGenerator) {
-    // Create the fields
-    std::vector<Value> convertedFields_;
-    for (size_t i = 0; i < elementTypes.size(); i++) {
-      auto* elementType = elementTypes[i];
+  /// Describes a (to be generated) member variable of a vertex. The variable
+  /// can be either generated for a poplar tensor that is to be connected to it
+  /// or an additional member variable that is not connected to a tensor.
+  class MemberVarInfo {
+    struct TensorMemberVar {
+      TypeRef elementType;
+      poplar::Tensor tensor;
+      VertexInOutType::Direction direction;
+    };
+    struct UnconnectedMemberVar {
+      TypeRef type;
+      CTypeQualifiers qualifiers;
+    };
 
-      if (!elementType->poplarEquivalentType()) {
-        throw std::runtime_error(
-            "Element type must be representable in Poplar");
-      }
+   private:
+    MemberVarInfo() = delete;
+    MemberVarInfo(TensorMemberVar info) : member(info) {}
+    MemberVarInfo(UnconnectedMemberVar info) : member(info) {}
 
-      auto* vectorType =
-          VertexVectorType::get(elementType->poplarEquivalentType());
-      auto* fieldType = VertexInOutType::get(directions[i], vectorType);
-
-      spdlog::trace("Adding field of type {} with native element type {}",
-                    fieldType->str(),
-                    elementType->poplarEquivalentType()->str());
-      fields_.emplace_back(fieldType);
-
-      // Tensors of types unsupported by Poplar are converted to pointers of the
-      // correct type
-      if (elementType != elementType->poplarEquivalentType()) {
-        // Cast the vector type to the actual element type
-        auto* convertedVectorType = VertexVectorType::get(elementType);
-        auto* convertedFieldType =
-            VertexInOutType::get(directions[i], convertedVectorType);
-        convertedFields_.push_back(
-            fields_[i].reinterpretCast(convertedFieldType));
-      } else {
-        convertedFields_.push_back(fields_[i]);
-      }
+   public:
+    /// Creates an instance that describes a member variable that is generated
+    /// for a poplar tensor. The resulting member variable will be connected to
+    /// the tensor.
+    static MemberVarInfo create(TypeRef elementType, poplar::Tensor tensor,
+                                VertexInOutType::Direction dir) {
+      return MemberVarInfo(TensorMemberVar{elementType, tensor, dir});
+    }
+    /// Creates an instance that describes a member variable that is not
+    /// connected to a tensor. The resulting member variable will be an
+    /// additional member variable of the vertex that poplar does not know
+    /// about.
+    static MemberVarInfo create(TypeRef type, CTypeQualifiers qualifiers) {
+      return MemberVarInfo(UnconnectedMemberVar{type, qualifiers});
     }
 
-    // Generate the compute function
-    Function userFunc = computeFunctionGenerator(convertedFields_);
-    if (userFunc.expr() != "compute") {
-      throw std::runtime_error("Compute function must be named 'compute'");
+    bool isTensorMemberVar() const {
+      return std::holds_alternative<TensorMemberVar>(member);
+    }
+    bool isUnconnectedMemberVar() const {
+      return std::holds_alternative<UnconnectedMemberVar>(member);
+    }
+    const TensorMemberVar& tensorMemberVar() const {
+      assert(isTensorMemberVar());
+      return std::get<TensorMemberVar>(member);
+    }
+    const UnconnectedMemberVar& unconnectedMemberVar() const {
+      assert(isUnconnectedMemberVar());
+      return std::get<UnconnectedMemberVar>(member);
     }
 
-    // Check if the compute function is valid
-    if (userFunc.returnType() != BoolType::get()) {
-      throw std::runtime_error("Compute function must return a boolean");
-    }
-    if (userFunc.args().size() > 1 ||
-        (userFunc.args().size() == 1 &&
-         userFunc.args()[0].type() != Type::UINT32)) {
-      throw std::runtime_error(
-          "Compute function must either take no arguments or a single "
-          "uint32_t argument, which is the worker id");
-    }
-
-    bool isMultiVertex = userFunc.args().size() == 1;
-
-    // Begin vertex generation
-    CodeGen::emitCode("class " + name + " : public ::poplar::" +
-                      (isMultiVertex ? "MultiVertex" : "Vertex") + " {\n");
-    CodeGen::emitCode("public:\n");
-
-    // Emit the member variables
-    for (const auto& field : fields_) {
-      field.declare();
-    }
-
-    for (const auto& function : CodeGen::functions()) {
-      CodeGen::emitCode(function.second);
-      CodeGen::emitCode("\n");
-    }
-
-    CodeGen::emitCode("};");
-  }
+   private:
+    std::variant<TensorMemberVar, UnconnectedMemberVar> member;
+  };
 
   /**
    * @brief Constructs and emits a Vertex with a given name, types, directions,
    * and compute function generator.
    * @param name The name of the vertex.
-   * @param types The types of the vertex fields.
-   * @param directions The directions of the vertex fields (Input, Output,
-   * InOut).
-   * @param computeFunctionGenerator The compute function generator. Must accept
-   * a one \ref MemberVariable per field and return the compute function. The
-   * generated function must be named "compute", accept a single argument (the
-   * worker id) or no argument, and return a boolean.
+   * @param memberVars The member variables of the vertex. This can be tensors
+   * that are connected to the vertex or additional member variables that are
+   * not connected to tensors.
+   * @param computeFunctionGenerator A callback that generates the compute
+   * function for the vertex. The callback must accept a vector of \ref Value,
+   * one for each tensor and the additional member variables. The callback must
+   * return a \ref Function named "compute" that returns a boolean.
    */
-  template <typename F>
-    requires ::graphene::detail::invocable_with_args_of<F, Value>
-  Vertex(std::string name, std::vector<TypeRef> types,
-         std::vector<VertexInOutType::Direction> directions,
-         F computeFunctionGenerator)
-      : Vertex(
-            name, types, directions,
-            [&computeFunctionGenerator](std::vector<MemberVariable> fields) {
-              return graphene::detail::callFunctionWithUnpackedArgs<Function>(
-                  computeFunctionGenerator, fields);
-            }) {
-    static_assert(
-        std::is_same_v<
-            typename graphene::detail::function_traits<F>::return_type,
-            Function>,
-        "Compute function generator must return a Function object");
-  }
+  Vertex(std::string name, std::vector<MemberVarInfo> memberVars,
+         VertexKind kind,
+         std::function<Function(std::vector<Value>)> computeFunctionGenerator);
+
+  ~Vertex() { currentVertex = nullptr; }
 
   const std::vector<MemberVariable>& fields() const { return fields_; }
 
  private:
+  /// Adds a function to the current vertex. This function is called by the
+  /// constructor of the \ref Function class and registers the function with the
+  /// current vertex.
+  static void addFunctionToCurrentVertex(Function function);
+  friend class Function;
+
   std::vector<MemberVariable> fields_;
+  std::vector<Function> functions_;
+  static Vertex* currentVertex;
 };
 }  // namespace graphene::codedsl

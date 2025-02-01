@@ -27,7 +27,7 @@ class CRSHostMatrix : public HostMatrixBase {
   static std::tuple<CRSAddressing, CRSMatrixValues<Type>> convertToCRS(
       TripletMatrix<Type> tripletMatrix);
   template <FloatDataType Type>
-  static Partitioning calculatePartitioning(size_t numTiles,
+  static Partitioning calculatePartitioning(size_t &numTiles,
                                             const CRSMatrixValues<Type> &crs,
                                             const CRSAddressing &addressing);
   static std::vector<TileLayout> calculateTileLayouts(

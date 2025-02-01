@@ -11,6 +11,15 @@
 
 namespace graphene {
 
+struct CTypeQualifiers {
+  bool Volatile = false;
+  bool Const = false;
+  bool Restrict = false;
+  static CTypeQualifiers getVolatile() { return {true, false, false}; }
+  static CTypeQualifiers getConst() { return {false, true, false}; }
+  static CTypeQualifiers getRestrict() { return {false, false, true}; }
+};
+
 struct Type;
 using TypeRef = const Type *;
 

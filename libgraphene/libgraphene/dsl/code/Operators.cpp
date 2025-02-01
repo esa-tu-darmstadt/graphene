@@ -3,6 +3,7 @@
 #include <spdlog/spdlog.h>
 
 #include "libgraphene/dsl/code/CodeGen.hpp"
+#include "libgraphene/dsl/code/Function.hpp"
 #include "libgraphene/dsl/common/details/Expressions.hpp"
 
 namespace graphene::codedsl {
@@ -13,14 +14,6 @@ Value getTileID() {
 
 Expression operation(detail::BinaryOpType opType, Value lhs, Value rhs) {
   TypeRef resultType = detail::inferType(opType, lhs.type(), rhs.type());
-
-  spdlog::trace("Inferring type: {}({}, {}) -> {}", to_string(opType),
-                lhs.type()->str(), rhs.type()->str(), resultType->str());
-  if (lhs.type() != rhs.type()) {
-    spdlog::trace("Implicit type conversion: {}({}, {}) -> {}",
-                  to_string(opType), lhs.type()->str(), rhs.type()->str(),
-                  resultType->str());
-  }
   std::string expr;
   switch (opType) {
     default:
@@ -96,8 +89,6 @@ Expression operation(detail::BinaryOpType opType, Value lhs, Value rhs) {
 
 Expression operation(detail::UnaryOpType opType, Value arg) {
   TypeRef resultType = detail::inferType(opType, arg.type());
-  spdlog::trace("Inferring type: {}({}) -> {}", to_string(opType),
-                arg.type()->str(), resultType->str());
   std::string expr;
   switch (opType) {
     default:
@@ -147,5 +138,16 @@ Value getMaxLoopRptCount() { return (uint16_t)4095; }
 void AssumeHardwareLoop(Value iterator) {
   Assume(iterator <= getMaxLoopRptCount());
 }
+
+void syncAndStartOnAllWorkers(const Function &func) {
+  if (func.threadKind() != ThreadKind::Worker)
+    throw std::runtime_error("Function must be a worker function");
+  CodeGen::emitStatement(
+      "::ipu::syncAndStartOnAllWorkers<ConcreteVertexType, "
+      "&ConcreteVertexType::" +
+      func.name() + ">(this)");
+}
+
+void syncAllWorkers() { CodeGen::emitStatement("::ipu::syncAllWorkers()"); }
 
 }  // namespace graphene::codedsl

@@ -28,9 +28,10 @@ class Solver : public solver::Solver {
   void factorize();
 
   void solveCRS(Tensor& x, Tensor& b);
+  void solveCRS_old(Tensor& x, Tensor& b);
 
-  void factorizeCRS_ILU();
-  void factorizeCRS_DILU();
+  void factorizeCRS();
+  void factorizeCRS_ILU_old();
 
  public:
   Solver(const Matrix& matrix, std::shared_ptr<Configuration> config);

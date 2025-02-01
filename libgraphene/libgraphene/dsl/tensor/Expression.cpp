@@ -13,6 +13,7 @@
 #include "libgraphene/common/Type.hpp"
 #include "libgraphene/dsl/code/CodeGen.hpp"
 #include "libgraphene/dsl/code/ControlFlow.hpp"
+#include "libgraphene/dsl/code/Execute.hpp"
 #include "libgraphene/dsl/code/Operators.hpp"
 #include "libgraphene/dsl/code/Value.hpp"
 #include "libgraphene/dsl/tensor/Execute.hpp"
@@ -143,7 +144,7 @@ std::optional<codedsl::Value> getFirstDimensionSize(
   }
 
   unsigned stride = shapes[index].stride(0);
-  return codedsl::Variable(tensors[index].size() / stride, true);
+  return codedsl::Variable(tensors[index].size() / stride);
 }
 
 /// A visitor that translates an expression tree into a CodeDSL expression
@@ -269,7 +270,6 @@ void materializeExpressionInto(
     std::vector<codedsl::Value> inputsAndOutputVariables(firstInputIt,
                                                          args.end());
     GenerateCodeForExpressionVisitor visitor(inputsAndOutputVariables);
-    codedsl::CodeGen::emitSingleLineComment(expr.asString());
 
     // Calculate the shape of the iteration range (aka the input of the
     // expression) on the executing tile. Tensors are distributed across tiles
@@ -307,11 +307,9 @@ void materializeExpressionInto(
         // Align the chunk size, so that larger loads / stores can be done and
         // vectorization can be used
         codedsl::Value alignedChunkSize = (chunkSize / 4u) * 4u;
-        codedsl::Variable start(alignedChunkSize * workerID.value(), true);
-        codedsl::Variable end(
-            codedsl::Select(workerID.value() == 5u, numElements,
-                            start + alignedChunkSize),
-            true);
+        codedsl::Variable start(alignedChunkSize * workerID.value());
+        codedsl::Variable end(codedsl::Select(
+            workerID.value() == 5u, numElements, start + alignedChunkSize));
 
         loopIndex = codedsl::detail::ForStart(start, end, 1);
       } else {
@@ -361,9 +359,18 @@ void materializeExpressionInto(
       codedsl::detail::ForEnd();
     }
   };
-  codedsl::ExecuteAsMapped(inputsAndOutputTensors, inputsAndOutputTypes,
-                           inputsAndOutputDirections,
-                           /*multiVertex*/ multipleWorkers, code);
+
+  // Collect the member vars
+  std::vector<codedsl::Vertex::MemberVarInfo> memberVars;
+  for (size_t i = 0; i < inputsAndOutputTensors.size(); ++i) {
+    memberVars.push_back(codedsl::Vertex::MemberVarInfo::create(
+        inputsAndOutputTypes[i], inputsAndOutputTensors[i],
+        inputsAndOutputDirections[i]));
+  }
+  codedsl::ExecuteAsMapped(memberVars,
+                           multipleWorkers ? codedsl::VertexKind::MultiVertex
+                                           : codedsl::VertexKind::Vertex,
+                           code);
 }
 }  // namespace
 
@@ -573,10 +580,14 @@ Expression Expression::reduce(size_t dim, ReduceOperation op) const {
   Expression stage1 = *this;
   if (shape()[dim] > 6) {
     stage1 = reducePerWorker(dim, op);
+    // Make sure we square only once
+    if (op == ReduceOperation::SQUARE_ADD) op = ReduceOperation::ADD;
   }
 
   // Reduce on tiles
   Expression stage2 = stage1.reducePerTile(dim, op);
+  // Make sure we square only once
+  if (op == ReduceOperation::SQUARE_ADD) op = ReduceOperation::ADD;
 
   // Reduce between tiles on the same IPU if first dimension is reduced
   if (dim != 0) return stage2;

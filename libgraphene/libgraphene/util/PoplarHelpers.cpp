@@ -3,6 +3,7 @@
 #include <optional>
 #include <poplar/Interval.hpp>
 
+#include "libgraphene/common/Shape.hpp"
 #include "libgraphene/common/TileMapping.hpp"
 #include "libgraphene/util/Context.hpp"
 
@@ -39,8 +40,7 @@ poplar::Tensor sliceTensorToIPU(poplar::Tensor tensor, size_t ipu,
 
 poplar::Tensor sliceTensorToTile(poplar::Tensor tensor, size_t tile,
                                  const TileMapping &tileMapping) {
-  DistributedShape shape =
-      DistributedShape::fromPoplar(tensor.shape(), tileMapping.toPoplar());
+  TensorShape shape(tensor.shape());
 
   // The first dimension is broadcasted to all tiles
   if (shape[0] == 1) return tensor;
@@ -52,18 +52,18 @@ poplar::Tensor sliceTensorToTile(poplar::Tensor tensor, size_t tile,
         "interval per tile");
   if (intervalsOnTile.size() == 0) return {};
 
-  MappedInterval interval = *intervalsOnTile.begin();
+  Interval interval = *intervalsOnTile.begin();
   size_t stride = shape.stride(0);
 
-  assert(interval.start() % stride == 0 &&
+  assert(interval.start % stride == 0 &&
          "Tensor can only be partitioned to multiple tiles along the first "
          "dimension");
-  assert(interval.end() % stride == 0 &&
+  assert(interval.end % stride == 0 &&
          "Tensor can only be partitioned to multiple tiles along the first "
          "dimension");
 
-  size_t startIndex = interval.start() / stride;
-  size_t endIndex = interval.end() / stride;
+  size_t startIndex = interval.start / stride;
+  size_t endIndex = interval.end / stride;
 
   return tensor.slice(startIndex, endIndex);
 }

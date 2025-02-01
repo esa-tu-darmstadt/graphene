@@ -88,6 +88,18 @@ class TensorShape : private std::vector<size_t> {
            static_cast<const std::vector<size_t> &>(other);
   }
 
+  /// Return a string representation of the shape
+  std::string str() const {
+    bool first = true;
+    std::string str;
+    for (size_t dim : *this) {
+      if (!first) str += "x";
+      str += std::to_string(dim);
+      first = false;
+    }
+    return str;
+  }
+
   const std::vector<size_t> &toPoplar() const { return *this; }
 };
 
@@ -270,16 +282,7 @@ class DistributedShape {
   }
 
   /// Return a string representation of the shape
-  std::string str() const {
-    bool first = true;
-    std::string str;
-    for (size_t dim : globalShape_) {
-      if (!first) str += "x";
-      str += std::to_string(dim);
-      first = false;
-    }
-    return str;
-  }
+  std::string str() const { return globalShape_.str(); }
 
   /// Dump the shape to stdout
   void dump() const { std::cout << str() << std::endl; }

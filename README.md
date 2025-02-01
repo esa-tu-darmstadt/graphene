@@ -39,3 +39,10 @@ Graphene provides a number of solvers for linear systems of equations:
 - Incomplete LU Factorization without fill-in (ILU0)
 
 The mixed precision iterative refinement solver is key to solving large systems of equations. Due to the lack of native double-precision support on the IPU, solvers must use single precision. The mixed precision iterative refinement solver uses double-word arithmetic for the solution vector and to compute its current residual. It iteratively minimizes the residual by calculating a correction vector using any of the other solvers in single precision.
+
+## Codegen performance discussion
+Issues:
+- Reduction vertices produce suboptimal code because they reload the accumulator from memory for every iteration. This could be fixed by reordering the loops so that the reduction is the innermost loop, and then using a variable to store the accumulator.
+- Use __builtin_assume to enable hardware loops where possible: TensorDSL lowering + solvers
+Positives:
+- Memset is utilized by the compiler if possible.

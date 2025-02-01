@@ -46,6 +46,10 @@ void Configuration::setFieldFromJSON<TypeRef>(nlohmann::json const& config,
                                               TypeRef& value) {
   if (config.find(field) != config.end()) {
     value = parseType(config[field]);
+    if (!value) {
+      throw std::runtime_error(
+          fmt::format("Unknown type in JSON config: {}", config[field]));
+    }
   }
 }
 

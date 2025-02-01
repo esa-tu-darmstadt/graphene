@@ -105,4 +105,10 @@ void Assume(Value expr);
 /// instructions can be used. This is equivalent to calling `Assume` with the
 /// expression `iterator <= getMaxLoopRptCount()`.
 void AssumeHardwareLoop(Value iterator);
+
+class Function;
+void syncAndStartOnAllWorkers(const Function &func);
+
+void syncAllWorkers();
+
 }  // namespace graphene::codedsl

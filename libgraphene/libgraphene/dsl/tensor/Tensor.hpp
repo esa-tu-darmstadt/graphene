@@ -7,6 +7,7 @@
 
 #include "libgraphene/common/Concepts.hpp"
 #include "libgraphene/dsl/tensor/Expression.hpp"
+#include "libgraphene/dsl/tensor/PrintTensorFormat.hpp"
 #include "libgraphene/dsl/tensor/details/Expressions.hpp"
 #include "libgraphene/matrix/Norm.hpp"
 
@@ -107,9 +108,7 @@ class Tensor : public Expression {
    *
    * @param value The value to move.
    */
-  Tensor(Tensor &&value) : Expression(std::move(value)) {
-    spdlog::trace("Move constructing tensor");
-  }
+  Tensor(Tensor &&value) = default;
 
   /** Assignment operators. Generates copy programs. */
   Tensor &operator=(const Tensor &value);
@@ -148,7 +147,7 @@ class Tensor : public Expression {
    * std::cout. If given, must be still alive when the tensor is print during
    * execution.
    */
-  void print(std::string name = "", poplar::PrintTensorFmt fmt = {},
+  void print(std::string name = "", PrintTensorFormat fmt = {},
              std::ostream &stream = std::cout) const;
 
   /**

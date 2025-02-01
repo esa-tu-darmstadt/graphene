@@ -1,7 +1,10 @@
 #pragma once
 
+#include <spdlog/fmt/bundled/core.h>
+
 #include <array>
 #include <cstddef>
+#include <stdexcept>
 #include <tuple>
 namespace graphene::detail {
 template <typename F, typename = void>  // used for SFINAE later
@@ -63,6 +66,13 @@ ret_t callFunctionWithUnpackedArgs(F& code, args_t args,
  */
 template <typename ret_t, typename F, typename args_t>
 ret_t callFunctionWithUnpackedArgs(F& code, args_t args) {
+  // Make sure the number of arguments matches the number of parameters
+  if (std::tuple_size_v<typename function_traits<F>::args_type> != args.size())
+    throw std::invalid_argument(
+        fmt::format("Number of arguments ({}) does not match number of "
+                    "parameters in function ({})",
+                    args.size(),
+                    std::tuple_size_v<typename function_traits<F>::args_type>));
   if constexpr (std::is_same_v<ret_t, void>) {
     callFunctionWithUnpackedArgs<ret_t>(
         code, args, std::make_index_sequence<function_traits<F>::arity>{});

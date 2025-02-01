@@ -48,11 +48,11 @@ RemoteTensor HostTensor::copyToRemote() const {
           "supported");
     }
 
-    MappedInterval interval = *intervalsOnIPU.begin();
+    Interval interval = *intervalsOnIPU.begin();
 
     // Register the copy of this interval to the remote buffer
     char* intervalData =
-        reinterpret_cast<char*>(data()) + interval.start() * type()->size();
+        reinterpret_cast<char*>(data()) + interval.start * type()->size();
     Runtime::instance().registerCopyToRemoteBuffer(type(), buffer, intervalData,
                                                    interval.size());
   }

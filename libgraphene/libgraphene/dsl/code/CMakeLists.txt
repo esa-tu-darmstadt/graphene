@@ -5,5 +5,7 @@ add_library(GrapheneCodeDSL SHARED
     "Value.cpp"
     "ControlFlow.cpp"
     "Execute.cpp"
+    "Vertex.cpp"
+    "Function.cpp"
 )
 target_link_libraries(GrapheneCodeDSL PRIVATE GrapheneCommon GrapheneDSLCommon GrapheneUtil popops)

@@ -56,7 +56,7 @@ Variable codedsl::detail::ForStart(Value start, Value end, Value step,
   CodeGen::emitCode("for (");
   Variable i(iteratorType, start);
   if (reverse) {
-    CodeGen::emitStatement((i >= start).expr());
+    CodeGen::emitStatement((i >= end).expr());
     i.assign(i - step, false);
   } else {
     CodeGen::emitStatement((i < end).expr());
@@ -83,3 +83,4 @@ void codedsl::ForReverse(Value start, Value end, Value step,
 }
 
 void codedsl::Break() { CodeGen::emitStatement("break"); }
+void codedsl::Continue() { CodeGen::emitStatement("continue"); }

@@ -1,21 +1,22 @@
 #include "libgraphene/dsl/code/Execute.hpp"
 
+#include "libgraphene/common/TileMapping.hpp"
+#include "libgraphene/dsl/code/ControlFlow.hpp"
+#include "libgraphene/dsl/code/Function.hpp"
+#include "libgraphene/util/Context.hpp"
+#include "libgraphene/util/DebugInfo.hpp"
+#include "libgraphene/util/PoplarHelpers.hpp"
+#include "libgraphene/util/Runtime.hpp"
+#include "libgraphene/util/VertexCache.hpp"
+
 using namespace graphene;
 
 void graphene::codedsl::ExecuteAsMapped(
-    std::vector<poplar::Tensor> tensors, std::vector<TypeRef> tensorTypes,
-    std::vector<VertexInOutType::Direction> directions, bool multiVertex,
+    std::vector<Vertex::MemberVarInfo> vars, VertexKind kind,
     std::function<void(std::vector<Value>)> code, bool broadcastTensors) {
-  if (tensorTypes.size() != tensors.size() ||
-      directions.size() != tensors.size()) {
-    throw std::runtime_error(
-        "Number of tensors, types, and directions must "
-        "match");
-  }
-
   auto transformedCode = [&](std::vector<Value> memberVars) -> Function {
-    if (multiVertex)
-      return Function("compute", Type::BOOL, {Type::UINT32},
+    if (kind == VertexKind::MultiVertex)
+      return Function("compute", Type::BOOL, {Type::UINT32}, ThreadKind::Worker,
                       [&](Parameter workerID) -> void {
                         // Call the user-provided code with the worker ID and
                         // member variables
@@ -29,14 +30,18 @@ void graphene::codedsl::ExecuteAsMapped(
                         Return(true);
                       });
     else
-      return Function("compute", Type::BOOL, [&]() -> void {
-        // Call the user-provided code with the member variables
-        std::vector<Value> args;
-        args.insert(args.end(), memberVars.begin(), memberVars.end());
-        code(args);
-        // Return true if the user code does not do so
-        Return(true);
-      });
+      return Function(
+          "compute", Type::BOOL,
+          kind == VertexKind::SupervisorVertex ? ThreadKind::Supervisor
+                                               : ThreadKind::Worker,
+          [&]() -> void {
+            // Call the user-provided code with the member variables
+            std::vector<Value> args;
+            args.insert(args.end(), memberVars.begin(), memberVars.end());
+            code(args);
+            // Return true if the user code does not do so
+            Return(true);
+          });
   };
 
   // Emit the necessary includes
@@ -44,39 +49,60 @@ void graphene::codedsl::ExecuteAsMapped(
   CodeGen::emitInclude("libtwofloat/arithmetics/double-word-arithmetic.hpp",
                        false);
   CodeGen::emitInclude("libtwofloat/operators.hpp", false);
+  CodeGen::emitInclude("ipu-thread-sync/ipu-thread-sync.hpp", false);
   CodeGen::emitInclude("print.h", true);
 
-  // Generate the vertex
-  std::string vertexName = CodeGen::generateVertexName();
-  Vertex vertex(vertexName, tensorTypes, directions, transformedCode);
+  // Generate the vertex with a placeholder name. This enables us to generate a
+  // hash of the code, independent of the vertex name. The actual vertex name
+  // will be set after hashing.
+  std::string vertexName = VertexCache::getVertexNamePlaceholder();
+  Vertex vertex(vertexName, vars, kind, transformedCode);
 
   std::stringstream ss = CodeGen::reset();
-  auto& graph = Context::graph();
+  std::string codeStr = ss.str();
 
-  // Compile the vertex
-  {
+  size_t hash = std::hash<std::string>{}(codeStr);
+
+  if (std::optional<VertexCache::Entry> cached = VertexCache::lookup(hash)) {
+    // cache hit
+    vertexName = cached->vertexName;
+    spdlog::trace("Restored vertex {} from cache {}", vertexName,
+                  cached->srcPath.string());
+  } else {
+    // cache miss, compile it and insert it into the cache
+    vertexName = VertexCache::getUniqueVertexName(hash);
+    CodeGen::replaceVertexNamePlaceholder(
+        codeStr, VertexCache::getVertexNamePlaceholder(), vertexName);
+
     // Write the vertex to a file
-    std::filesystem::path srcPath =
-        Runtime::instance().getExpressionStorageDir() / (vertexName + ".cpp");
+    std::filesystem::path srcPath = VertexCache::getVertexSourcePath(hash);
+
     std::ofstream srcFile(srcPath);
-    srcFile << ss.str();
+    srcFile << codeStr;
     srcFile.close();
 
-    std::string baseCmd = "popc -O3 -I" +
-                          Runtime::instance().getTwoFloatSourceDir().string() +
-                          " " + srcPath.string();
-    std::string elfCmd =
-        baseCmd + " -o " + srcPath.replace_extension(".elf").string();
-    std::string asmCmd = baseCmd + " --target=ipu21 -S -o " +
-                         srcPath.replace_extension(".S").string();
+    // Compile the vertex
+    std::filesystem::path objectFilePath =
+        VertexCache::getVertexObjectPath(hash);
+    std::string baseCmd = "popc -O3 --target=ipu2 " + srcPath.string();
+    baseCmd +=
+        " -I" + Runtime::instance()
+                    .getRuntimeLibIncludeDir(Runtime::RuntimeLib::TwoFloat)
+                    .string();
+    baseCmd +=
+        " -I" + Runtime::instance()
+                    .getRuntimeLibIncludeDir(Runtime::RuntimeLib::IpuThreadSync)
+                    .string();
+    std::string elfCmd = baseCmd + " -o " + objectFilePath.string();
+    std::string asmCmd =
+        baseCmd + " -S -o " + srcPath.replace_extension(".S").string();
     spdlog::trace("Compiling vertex with command: {}", elfCmd);
-    std::string irCmd = baseCmd + " --target=ipu21 --emit-llvm -o " +
+    std::string irCmd = baseCmd + " --emit-llvm -o " +
                         srcPath.replace_extension(".ll").string();
     if (std::system(elfCmd.c_str()) != 0) {
       throw std::runtime_error("Failed to compile vertex");
     }
-    spdlog::trace("Compiled vertex to: {}",
-                  srcPath.replace_extension(".elf").string());
+    spdlog::trace("Compiled vertex to: {}", objectFilePath.string());
     if (Runtime::instance().dumpExpressionAsm()) {
       if (std::system(asmCmd.c_str()) != 0) {
         throw std::runtime_error("Failed to compile vertex to assembly");
@@ -92,12 +118,24 @@ void graphene::codedsl::ExecuteAsMapped(
                     srcPath.replace_extension(".ll").string());
     }
 
-    graph.addCodelets(srcPath.replace_extension(".elf").string(),
-                      poplar::CodeletFileType::Object);
+    // Insert the vertex into the cache
+    VertexCache::insert(hash, vertexName);
+
+    spdlog::trace("Vertex {} compiled and cached", vertexName);
   }
+
+  // Add the codelet to the graph
+  auto& graph = Context::graph();
+  graph.addCodelets(VertexCache::getVertexObjectPath(hash).string(),
+                    poplar::CodeletFileType::Object);
 
   // Get the tensor mappings
   std::vector<TileMapping> tensorMappings;
+  std::vector<poplar::Tensor> tensors;
+  for (const auto& var : vars) {
+    if (var.isTensorMemberVar())
+      tensors.push_back(var.tensorMemberVar().tensor);
+  }
   for (const auto& tensor : tensors) {
     tensorMappings.push_back(
         TileMapping::fromPoplar(graph.getTileMapping(tensor)));

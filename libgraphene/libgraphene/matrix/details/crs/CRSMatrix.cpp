@@ -10,6 +10,7 @@
 
 #include "libgraphene/common/Shape.hpp"
 #include "libgraphene/common/TileMapping.hpp"
+#include "libgraphene/dsl/code/ControlFlow.hpp"
 #include "libgraphene/dsl/code/Operators.hpp"
 #include "libgraphene/dsl/common/details/Expressions.hpp"
 #include "libgraphene/dsl/tensor/Execute.hpp"
