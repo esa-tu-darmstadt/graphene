@@ -7,18 +7,20 @@
     "benchmark": "solve",
     "solver": {
         "type": "IterativeRefinement",
-        "relResidual": 1e-20,
-        "maxIterations": 20,
+        "relResidual": 1e-9,
+        "maxIterations": 1000,
         "extendedPrecisionType": "float64",
         "printPerformanceAfterSolve": true,
         "innerSolver": {
             "type": "PBiCGStab",
-            "maxIterations": 5,
-            "relResidual": 1e-3,
-            "printPerformanceEachIteration": true,
-            // "printPerformanceAfterSolve": true,
+            "maxIterations": 45,
+            "relResidual": 1e-5,
+            // "printPerformanceEachIteration": true,
+            "printPerformanceAfterSolve": true,
             "preconditioner": {
                 "type": "ILU",
+                "solveMulticolor": true,
+                "factorizeMulticolor": true,
                 "diagonalBased": false
             }
         }
