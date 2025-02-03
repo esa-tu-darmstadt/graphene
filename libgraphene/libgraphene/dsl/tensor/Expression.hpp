@@ -151,12 +151,16 @@ class Expression {
                     ReduceOperation op = ReduceOperation::ADD) const;
 
   /**
-   * @brief Reduce the value along the given dimensions on each tile.
+   * @brief Reduce the value along the given dimensions on each tile. The shape
+   * of the resulting tensor has the size of the reduced dimension set to the
+   * number of tiles.
    */
   Expression reducePerTile(size_t dim, ReduceOperation op) const;
 
   /**
    * @brief Reduce the value along the given dimensions on each worker thread.
+   * The shape of the resulting tensor has the size of the reduced dimension set
+   * to the number of tiles times the number of worker threads per tile (6).
    */
   Expression reducePerWorker(size_t dim, ReduceOperation op) const;
 
@@ -202,7 +206,7 @@ class Expression {
 };
 
 /**
- * @brief Materializes an expression to a new \ref Value.
+ * @brief Materializes an expression to a new \ref Tensor.
  *
  * @tparam Type The data type of the expression.
  * @param expr The expression to materialize.
@@ -211,7 +215,7 @@ class Expression {
 Tensor materializeExpression(const Expression &expr);
 
 /**
- * @brief Materializes an expression into an existing \ref Value.
+ * @brief Materializes an expression into an existing \ref Tensor.
  *
  * @tparam Type The data type of the expression.
  * @param expr The expression to materialize.
