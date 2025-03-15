@@ -1,3 +1,3 @@
-add_executable(playground playground.cpp)
+add_executable(graphene-playground playground.cpp)
 
-target_link_libraries(playground Graphene spdlog::spdlog_header_only)
+target_link_libraries(graphene-playground Graphene spdlog::spdlog_header_only)
