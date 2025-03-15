@@ -8,4 +8,4 @@ add_library(GrapheneCodeDSL SHARED
     "Vertex.cpp"
     "Function.cpp"
 )
-target_link_libraries(GrapheneCodeDSL PRIVATE GrapheneCommon GrapheneDSLCommon GrapheneUtil popops)
+target_link_libraries(GrapheneCodeDSL PUBLIC GrapheneCommon GrapheneDSLCommon GrapheneUtil)

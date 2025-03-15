@@ -17,9 +17,11 @@ add_subdirectory(matrix)
 add_subdirectory(dsl)
 add_subdirectory(util)
 
+add_library(GrapheneHeaders INTERFACE)
+target_include_directories(GrapheneHeaders INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/..)
+
 add_library(Graphene INTERFACE)
 target_link_libraries(Graphene INTERFACE GrapheneCommon GrapheneUtil GrapheneTensorDSL GrapheneCodeDSL GrapheneMatrix nlohmann_json::nlohmann_json metis)
-target_include_directories(Graphene INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/..)
 
 # Add a convenience target to build all the tests
 add_custom_target(GrapheneTests)
