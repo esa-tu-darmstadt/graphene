@@ -11,7 +11,9 @@ For further details and technical insights, please refer to our associated scien
 
 ## Usage and Example
 
-To build Graphene, you need to have the Poplar SDK installed and sourced in your environment. The following steps will guide you through the process:
+To build Graphene, you need to have the Poplar SDK installed and sourced in your environment. For a controlled environment, you can use the provided [Dockerfile](.devcontainer/Dockerfile) or open the project in a [Visual Studio Code Dev Container](https://code.visualstudio.com/docs/remote/containers).
+
+ The following steps will guide you through the process:
 1. Clone the repository recursively to include the submodules:
    ```bash
    git clone --recursive https://github.com/esa-tu-darmstadt/graphene.git
@@ -26,7 +28,6 @@ To build Graphene, you need to have the Poplar SDK installed and sourced in your
     cmake --build build
     ```
 This will build the Graphene library and the associated applications for the IPU2 and IPU21 architectures. 
-
 
 Below is a simple example demonstrating how to write and execute a DSL-based algorithm with Graphene:
 
