@@ -29,5 +29,5 @@ RUN git clone https://github.com/gabime/spdlog.git && cd spdlog && git checkout 
   cmake .. && make -j install
 
 # Install some additional packages
-RUN apt update && apt install -y bash-completion libparmetis-dev
+RUN apt update && apt install -y bash-completion libmetis-dev
 
