@@ -1,20 +1,20 @@
 /*
  * Graphene Linear Algebra Framework for Intelligence Processing Units.
  * Copyright (C) 2025 Embedded Systems and Applications, TU Darmstadt.
- * 
+ *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as published
  * by the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
- * 
+ *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU Affero General Public License for more details.
- * 
+ *
  * You should have received a copy of the GNU Affero General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
-*/
+ */
 
 #pragma once
 
@@ -94,7 +94,7 @@ GRAPHENE_DEFINE_EXPR_UNARY_OP(Rsqrt, RSQRT)
   namespace ops {                                             \
                                                               \
   template <DataTypeOrExpression T1, DataTypeOrExpression T2> \
-    requires AtLeastOneExpression<T1, T2>                     \
+  requires AtLeastOneExpression<T1, T2>                       \
   inline Expression name(const T1 &lhs, const T2 &rhs) {      \
     auto lhsExpr = detail::wrapInExpression(lhs);             \
     auto rhsExpr = detail::wrapInExpression(rhs);             \
@@ -108,7 +108,7 @@ GRAPHENE_DEFINE_EXPR_UNARY_OP(Rsqrt, RSQRT)
 #define GRAPHENE_DEFINE_EXPR_BINARY_OP_AND_SYMBOL(name, op, symbol) \
   GRAPHENE_DEFINE_EXPR_BINARY_OP(name, op)                          \
   template <DataTypeOrExpression T1, DataTypeOrExpression T2>       \
-    requires AtLeastOneExpression<T1, T2>                           \
+  requires AtLeastOneExpression<T1, T2>                             \
   inline Expression operator symbol(const T1 &lhs, const T2 &rhs) { \
     return ops::name(lhs, rhs);                                     \
   }

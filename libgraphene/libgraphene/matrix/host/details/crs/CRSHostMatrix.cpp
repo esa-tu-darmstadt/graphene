@@ -1,20 +1,20 @@
 /*
  * Graphene Linear Algebra Framework for Intelligence Processing Units.
  * Copyright (C) 2025 Embedded Systems and Applications, TU Darmstadt.
- * 
+ *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as published
  * by the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
- * 
+ *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU Affero General Public License for more details.
- * 
+ *
  * You should have received a copy of the GNU Affero General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
-*/
+ */
 
 #include "libgraphene/matrix/host/details/crs/CRSHostMatrix.hpp"
 
@@ -73,7 +73,7 @@ constexpr size_t getUnsignedIntegerWidthForValue(size_t value) {
 /// vectors or similiar), where the outer range represents the tiles and the
 /// inner range the values of the tile.
 template <typename ConcreteType, std::ranges::input_range R>
-  requires std::ranges::input_range<std::ranges::range_value_t<R>>
+requires std::ranges::input_range<std::ranges::range_value_t<R>>
 void constructHostValueForType(HostTensor &hostValue, R data,
                                std::string name) {
   size_t numTiles = data.size();
@@ -104,7 +104,7 @@ void constructHostValueForType(HostTensor &hostValue, R data,
       std::move(concreteData), std::move(shape), std::move(mapping), name);
 }
 template <std::ranges::input_range R>
-  requires std::ranges::input_range<std::ranges::range_value_t<R>>
+requires std::ranges::input_range<std::ranges::range_value_t<R>>
 void constructHostValue(HostTensor &hostValue, R data, std::string name) {
   // Determine the required data type
   size_t maxValue = 0;
