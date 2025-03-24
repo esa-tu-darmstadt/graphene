@@ -45,10 +45,12 @@ namespace graphene::codedsl {
  * @param broadcastTensors True, tensors will be broadcast to all tiles if (1.)
  * their first dimension is 1 or (2.) their rank is less than the rank of the
  * tensor with the highest rank.
+ * @param tile The tile to execute the code on. If 0, the code will be executed
+ * on all tiles that have data mapped to them.
  */
 void ExecuteAsMapped(std::vector<Vertex::MemberVarInfo> vars, VertexKind kind,
                      std::function<void(std::vector<Value>)> code,
-                     bool broadcastTensors = true);
+                     bool broadcastTensors = true, size_t tile = 0);
 
 /**
  * @brief Executes the provided code function on each tile, operating on the
@@ -61,16 +63,21 @@ void ExecuteAsMapped(std::vector<Vertex::MemberVarInfo> vars, VertexKind kind,
  * @param code The code function to execute. Must accept one argument of type
  * \ref Value per tensor. If \p multiVertex is true, the first argument will be
  * the worker ID.
+ * @param broadcastTensors True, tensors will be broadcast to all tiles if (1.)
+ * their first dimension is 1 or (2.) their rank is less than the rank of the
+ * tensor with the highest rank.
+ * @param tile The tile to execute the code on. If 0, the code will be executed
+ * on all tiles that have data mapped to them.
  */
 template <typename F>
-  requires ::graphene::detail::invocable_with_args_of<F, Value>
+requires ::graphene::detail::invocable_with_args_of<F, Value>
 void ExecuteAsMapped(std::vector<Vertex::MemberVarInfo> vars, VertexKind kind,
-                     F code, bool broadcastTensors = true) {
+                     F code, bool broadcastTensors = true, size_t tile = 0) {
   ExecuteAsMapped(
       vars, kind,
       [&code](std::vector<Value> args) {
         ::graphene::detail::callFunctionWithUnpackedArgs<void>(code, args);
       },
-      broadcastTensors);
+      broadcastTensors, tile);
 }
 }  // namespace graphene::codedsl

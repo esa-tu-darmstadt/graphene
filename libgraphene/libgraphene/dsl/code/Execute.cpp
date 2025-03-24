@@ -31,7 +31,8 @@ using namespace graphene;
 
 void graphene::codedsl::ExecuteAsMapped(
     std::vector<Vertex::MemberVarInfo> vars, VertexKind kind,
-    std::function<void(std::vector<Value>)> code, bool broadcastTensors) {
+    std::function<void(std::vector<Value>)> code, bool broadcastTensors,
+    size_t targetTile) {
   auto transformedCode = [&](std::vector<Value> memberVars) -> Function {
     if (kind == VertexKind::MultiVertex)
       return Function("compute", Type::BOOL, {Type::UINT32}, ThreadKind::Worker,
@@ -63,6 +64,7 @@ void graphene::codedsl::ExecuteAsMapped(
   };
 
   // Emit the necessary includes
+  CodeGen::emitInclude("ipu_intrinsics", true);
   CodeGen::emitInclude("poplar/Vertex.hpp", true);
   CodeGen::emitInclude("libtwofloat/arithmetics/double-word-arithmetic.hpp",
                        false);
@@ -160,9 +162,11 @@ void graphene::codedsl::ExecuteAsMapped(
   }
 
   // Add an instance of the vertex to each tile
-  DebugInfo di("CodeDSL");
-  poplar::ComputeSet cs = graph.addComputeSet(di);
+  Context::Execute exec({"CodeDSL"});
   for (size_t tile = 0; tile < graph.getTarget().getNumTiles(); tile++) {
+    // Common, you can do better than this
+    if (targetTile != 0 && tile != targetTile) continue;
+
     // Check if the vertex has any data mapped to this tile
     bool isEmpty = true;
     for (size_t i = 0; i < tensors.size(); i++) {
@@ -174,7 +178,7 @@ void graphene::codedsl::ExecuteAsMapped(
 
     if (isEmpty) continue;
 
-    poplar::VertexRef v = graph.addVertex(cs, vertexName);
+    poplar::VertexRef v = graph.addVertex(exec.computeSet(), vertexName);
     graph.setTileMapping(v, tile);
 
     size_t longestRank =
@@ -197,7 +201,4 @@ void graphene::codedsl::ExecuteAsMapped(
       graph.connect(v[vertex.fields()[i].expr()], localTensor.flatten());
     }
   }
-
-  // Add the compute set to the program
-  Context::program().add(poplar::program::Execute(cs, di));
 }
