@@ -9,3 +9,5 @@ add_library(GrapheneCodeDSL SHARED
     "Function.cpp"
 )
 target_link_libraries(GrapheneCodeDSL PUBLIC GrapheneCommon GrapheneDSLCommon GrapheneUtil)
+
+add_library(Graphene::DSL::Code ALIAS GrapheneCodeDSL)

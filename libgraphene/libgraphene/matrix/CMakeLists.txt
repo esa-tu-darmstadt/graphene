@@ -25,3 +25,5 @@ add_library(GrapheneMatrix SHARED
     "solver/restarter/Configuration.cpp")
 target_link_libraries(GrapheneMatrix PRIVATE fast_matrix_market::fast_matrix_market)
 target_link_libraries(GrapheneMatrix PUBLIC GrapheneCommon GrapheneUtil GrapheneTensorDSL nlohmann_json::nlohmann_json)
+
+add_library(Graphene::Matrix ALIAS GrapheneMatrix)
