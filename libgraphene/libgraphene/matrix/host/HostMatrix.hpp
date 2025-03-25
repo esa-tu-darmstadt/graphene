@@ -18,6 +18,8 @@
 
 #pragma once
 
+#include <span>
+
 #include "libgraphene/common/Shape.hpp"
 #include "libgraphene/matrix/MatrixFormat.hpp"
 #include "libgraphene/matrix/host/details/HostMatrixBase.hpp"

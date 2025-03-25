@@ -20,7 +20,7 @@
 
 #include <spdlog/spdlog.h>
 
-#include <execution>
+#include <algorithm>
 
 #include "libgraphene/util/Tracepoint.hpp"
 
@@ -35,8 +35,8 @@ void sortTripletMatrx(TripletMatrix<Type> &tripletMatrix) {
     return std::tie(a.row, a.col) < std::tie(b.row, b.col);
   };
 
-  std::sort(std::execution::par_unseq, tripletMatrix.entries.begin(),
-            tripletMatrix.entries.end(), compareMatrixEntry);
+  std::sort(tripletMatrix.entries.begin(), tripletMatrix.entries.end(),
+            compareMatrixEntry);
 }
 
 template void sortTripletMatrx(TripletMatrix<float> &tripletMatrix);
