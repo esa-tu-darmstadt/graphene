@@ -19,5 +19,5 @@
 #pragma once
 namespace graphene::matrix {
 
-enum class MatrixFormat { CRS, Triplet, Dense };
+enum class MatrixFormat { CRS, LDU, Triplet, Dense };
 }

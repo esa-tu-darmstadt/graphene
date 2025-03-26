@@ -26,7 +26,7 @@
 
 #include "libgraphene/common/Concepts.hpp"
 #include "libgraphene/dsl/tensor/HostTensor.hpp"
-#include "libgraphene/matrix/host/TileLayout.hpp"
+#include "libgraphene/matrix/host/DistributedTileLayout.hpp"
 #include "libgraphene/matrix/host/details/CoordinateFormat.hpp"
 #include "libgraphene/matrix/host/details/HostMatrixBase.hpp"
 namespace graphene::matrix::host::crs {
@@ -48,11 +48,11 @@ class CRSHostMatrix : public HostMatrixBase {
   static Partitioning calculatePartitioning(size_t &numTiles,
                                             const CRSMatrixValues<Type> &crs,
                                             const CRSAddressing &addressing);
-  static std::vector<TileLayout> calculateTileLayouts(
+  static std::vector<TilePartition> calculateTileLayouts(
       const Partitioning &partitioning, const CRSAddressing &matrix);
   static std::vector<CRSAddressing> calculateLocalAddressings(
       const CRSAddressing &globalAddressing,
-      const std::vector<TileLayout> &tileLayouts);
+      const std::vector<TilePartition> &tilePartitions);
 
   template <FloatDataType Type>
   void decomposeValues(const CRSMatrixValues<Type> &globalMatrix);

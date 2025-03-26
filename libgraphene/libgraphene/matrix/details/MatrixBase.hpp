@@ -21,7 +21,7 @@
 #include "libgraphene/dsl/tensor/Tensor.hpp"
 #include "libgraphene/matrix/MatrixFormat.hpp"
 #include "libgraphene/matrix/Norm.hpp"
-#include "libgraphene/matrix/host/HostMatrix.hpp"
+#include "libgraphene/matrix/host/DistributedTileLayout.hpp"
 
 namespace graphene::matrix {
 
@@ -35,15 +35,15 @@ class HostMatrixBase;
  * @tparam Type The data type of the elements stored in the matrix.
  */
 struct MatrixBase {
-  host::HostMatrix hostMatrix;  ///< The host matrix.
+  const host::DistributedTileLayout &tileLayout;
 
   /**
    * @brief Construct a new MatrixBase object.
    *
    * @param hostMatrix The host matrix to be used.
    */
-  MatrixBase(std::shared_ptr<host::HostMatrixBase> hostMatrix)
-      : hostMatrix(std::move(hostMatrix)) {}
+  MatrixBase(const host::DistributedTileLayout &tileLayout)
+      : tileLayout(tileLayout) {}
 
   /**
    * @brief Virtual destructor for MatrixBase.
@@ -107,7 +107,7 @@ struct MatrixBase {
    *
    * @return size_t The number of tiles.
    */
-  size_t numTiles() const { return hostMatrix.numTiles(); }
+  size_t numTiles() const { return tileLayout.numTiles(); }
 
   /**
    * @brief Returns a view of the vector without the halo cells. Both values
@@ -134,8 +134,7 @@ struct MatrixBase {
    *
    * @return MatrixFormat The format of the matrix.
    */
-  MatrixFormat getFormat() const { return hostMatrix.getFormat(); }
-
+  virtual MatrixFormat getFormat() const = 0;
   /**
    * @brief Create an uninitialized vector with the correct shape and tile
    * mapping for a vector that is compatible with the matrix.

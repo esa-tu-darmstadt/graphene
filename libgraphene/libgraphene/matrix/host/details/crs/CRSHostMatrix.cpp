@@ -38,8 +38,8 @@
 #include "libgraphene/dsl/tensor/Tensor.hpp"
 #include "libgraphene/matrix/Matrix.hpp"
 #include "libgraphene/matrix/details/crs/CRSAddressing.hpp"
+#include "libgraphene/matrix/host/DistributedTileLayout.hpp"
 #include "libgraphene/matrix/host/HostMatrix.hpp"
-#include "libgraphene/matrix/host/TileLayout.hpp"
 #include "libgraphene/matrix/host/details/CoordinateFormat.hpp"
 #include "libgraphene/matrix/host/details/MatrixMarket.hpp"
 #include "libgraphene/util/Tracepoint.hpp"
@@ -73,10 +73,10 @@ CRSHostMatrix::CRSHostMatrix(TripletMatrix<Type> tripletMatrix, size_t numTiles,
   this->partitioning_ = std::move(
       calculatePartitioning(numTiles_, globalMatrixValues, globalAddressing_));
 
-  this->tileLayout_ =
+  this->tilePartitions_ =
       std::move(calculateTileLayouts(this->partitioning_, globalAddressing_));
   this->localAddressings_ =
-      calculateLocalAddressings(globalAddressing_, this->tileLayout_);
+      calculateLocalAddressings(globalAddressing_, this->tilePartitions_);
 
   calculateRowColors();
   calculateColorAddressings();
@@ -270,7 +270,7 @@ Partitioning CRSHostMatrix::calculatePartitioning(
   return partitioning;
 }
 
-std::vector<TileLayout> CRSHostMatrix::calculateTileLayouts(
+std::vector<TilePartition> CRSHostMatrix::calculateTileLayouts(
     const Partitioning &partitioning, const CRSAddressing &addressing) {
   GRAPHENE_TRACEPOINT();
   spdlog::info("Calculating regions for each tile in parallel");
@@ -282,7 +282,7 @@ std::vector<TileLayout> CRSHostMatrix::calculateTileLayouts(
   size_t numRows = addressing.rowPtr.size() - 1;
 
   // Initialize the regions for each tile
-  std::vector<TileLayout> tiles;
+  std::vector<TilePartition> tiles;
   tiles.reserve(numTiles);
   for (size_t i = 0; i < numTiles; i++) {
     tiles.emplace_back(i);
@@ -308,7 +308,8 @@ std::vector<TileLayout> CRSHostMatrix::calculateTileLayouts(
 
   // Determine the regions for each tile in parallel
   std::for_each(
-      std::execution::par, tiles.begin(), tiles.end(), [&](TileLayout &tile) {
+      std::execution::par, tiles.begin(), tiles.end(),
+      [&](TilePartition &tile) {
         // Find all cells assigned to this tile and
         // categorize them into interior and separator cells
         for (size_t row = 0; row < numRows; ++row) {
@@ -347,7 +348,7 @@ std::vector<TileLayout> CRSHostMatrix::calculateTileLayouts(
   // Now that all regions are set, determine the local row to global row
   // mapping
   std::for_each(std::execution::par, tiles.begin(), tiles.end(),
-                [&](TileLayout &tile) { tile.calculateRowMapping(); });
+                [&](TilePartition &tile) { tile.calculateRowMapping(); });
 
   return tiles;
 }
@@ -357,7 +358,7 @@ matrix::Matrix CRSHostMatrix::copyToTile() {
   spdlog::info("Copying matrix to tiles");
 
   // Get the number of tiles and rows
-  size_t numTiles = this->tileLayout_.size();
+  size_t numTiles = this->numTiles();
   size_t numRows = this->partitioning_.rowToTile.size();
 
   auto offDiagonalValues = offDiagValues_.copyToRemote().copyToTile();
@@ -378,17 +379,17 @@ matrix::Matrix CRSHostMatrix::copyToTile() {
 std::vector<CRSHostMatrix::CRSAddressing>
 CRSHostMatrix::calculateLocalAddressings(
     const CRSAddressing &globalAddressing,
-    const std::vector<TileLayout> &tileLayouts) {
+    const std::vector<TilePartition> &tilePartitions) {
   GRAPHENE_TRACEPOINT();
   spdlog::info("Calculating local addressings in parallel");
-  size_t numTiles = tileLayouts.size();
+  size_t numTiles = tilePartitions.size();
 
   // Holds the decomposed rowPtr and colInd for each tile
   std::vector<CRSHostMatrix::CRSAddressing> localAddressings(numTiles);
 
   // Calculate the local addressings
-  std::for_each(std::execution::par, tileLayouts.begin(), tileLayouts.end(),
-                [&](const TileLayout &tile) {
+  std::for_each(std::execution::par, tilePartitions.begin(),
+                tilePartitions.end(), [&](const TilePartition &tile) {
                   // Calculate rowPtr and colInd for this tile
                   auto &rowPtr = localAddressings[tile.tileId].rowPtr;
                   auto &colInd = localAddressings[tile.tileId].colInd;
@@ -449,7 +450,7 @@ void CRSHostMatrix::decomposeValues(const CRSMatrixValues<Type> &globalMatrix) {
                                                      return addressing.rowPtr;
                                                    });
   rowPtr_ = constructSmallestIntegerHostValue(std::move(decomposedRowPtrs),
-                                              this->name_ + "_rowPtr");
+                                              this->name() + "_rowPtr");
 
   // Decompose colInd
   spdlog::trace("Decomposing colInds");
@@ -458,7 +459,7 @@ void CRSHostMatrix::decomposeValues(const CRSMatrixValues<Type> &globalMatrix) {
                                                      return addressing.colInd;
                                                    });
   colInd_ = constructSmallestIntegerHostValue(std::move(decomposedColInds),
-                                              this->name_ + "_colInd");
+                                              this->name() + "_colInd");
 }
 
 template <FloatDataType Type>
@@ -469,11 +470,11 @@ HostTensor CRSHostMatrix::decomposeOffDiagCoefficients(
     decomposedValues.reserve(colInd_.numElements());
 
     FirstDimDistribution firstDimDistribution;
-    firstDimDistribution.reserve(this->tileLayout_.size());
+    firstDimDistribution.reserve(this->numTiles());
 
     // Decompose and create the tile mapping
     size_t numElements = 0;
-    for (auto &tile : this->tileLayout_) {
+    for (auto &tile : this->tilePartitions_) {
       size_t numElementsOnThisTile = 0;
       const CRSAddressing &localAddressing = localAddressings_[tile.tileId];
       // Iterate over the rows of this tile
@@ -519,21 +520,21 @@ HostTensor CRSHostMatrix::decomposeOffDiagCoefficients(
     TileMapping mapping = TileMapping::linearMappingWithShape(distributedShape);
     return HostTensor::createPersistent(
         std::move(decomposedValues), std::move(distributedShape),
-        std::move(mapping), this->name_ + "_offDiag");
+        std::move(mapping), this->name() + "_offDiag");
   });
 }
 
 void CRSHostMatrix::calculateRowColors() {
   assert(!localAddressings_.empty());
-  rowColors_.resize(this->numTiles_);
-  numColors_.resize(this->numTiles_, 0);
+  rowColors_.resize(this->numTiles());
+  numColors_.resize(this->numTiles(), 0);
 
   spdlog::info("Calculating row colors in parallel");
 
   // Calculate the color of each row
   std::for_each(
-      std::execution::par, this->tileLayout_.begin(), this->tileLayout_.end(),
-      [&](TileLayout &tile) {
+      std::execution::par, this->tilePartitions_.begin(),
+      this->tilePartitions_.end(), [&](TilePartition &tile) {
         size_t numRows = tile.numInteriorRows() + tile.numSeperatorRows();
         auto &tileColors = rowColors_[tile.tileId];
         auto &localAddressing = localAddressings_[tile.tileId];
@@ -616,13 +617,13 @@ void CRSHostMatrix::calculateColorAddressings() {
   GRAPHENE_TRACEPOINT();
   spdlog::info("Calculating color addressings in parallel");
 
-  std::vector<std::vector<size_t>> colorSortAddr(this->numTiles_);
-  std::vector<std::vector<size_t>> colorSortStartPtr(this->numTiles_);
+  std::vector<std::vector<size_t>> colorSortAddr(this->numTiles());
+  std::vector<std::vector<size_t>> colorSortStartPtr(this->numTiles());
 
   // Calculate the color of each row
   std::for_each(
-      std::execution::par, this->tileLayout_.begin(), this->tileLayout_.end(),
-      [&](TileLayout &tile) {
+      std::execution::par, this->tilePartitions_.begin(),
+      this->tilePartitions_.end(), [&](TilePartition &tile) {
         size_t numColors = numColors_[tile.tileId];
         size_t numRows = tile.numSeperatorRows() + tile.numInteriorRows();
         auto &localAddressing = localAddressings_[tile.tileId];
@@ -648,7 +649,7 @@ void CRSHostMatrix::calculateColorAddressings() {
   // in colors with more than 12 rows
   size_t numParallizableRows = 0;
   size_t numTotalRows = 0;
-  for (size_t tileID = 0; tileID < this->numTiles_; ++tileID) {
+  for (size_t tileID = 0; tileID < this->numTiles(); ++tileID) {
     for (size_t color = 0; color < numColors_[tileID]; ++color) {
       size_t colorSize = colorSortStartPtr[tileID][color + 1] -
                          colorSortStartPtr[tileID][color];
@@ -668,9 +669,9 @@ void CRSHostMatrix::calculateColorAddressings() {
   }
 
   this->colorSortAddr = constructSmallestIntegerHostValue(
-      std::move(colorSortAddr), this->name_ + "_colorSortAddr");
+      std::move(colorSortAddr), this->name() + "_colorSortAddr");
   this->colorSortStartPtr = constructSmallestIntegerHostValue(
-      std::move(colorSortStartPtr), this->name_ + "_colorSortStartPtr");
+      std::move(colorSortStartPtr), this->name() + "_colorSortStartPtr");
 }
 
 // Explicit instantiation of the CRSHostMatrix constructor for the supported

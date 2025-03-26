@@ -26,6 +26,7 @@
 #include "libgraphene/dsl/tensor/Tensor.hpp"
 #include "libgraphene/matrix/details/MatrixBase.hpp"
 #include "libgraphene/matrix/details/crs/CRSMatrix.hpp"
+#include "libgraphene/matrix/host/DistributedTileLayout.hpp"
 
 namespace graphene::matrix {
 
@@ -125,12 +126,9 @@ class Matrix {
   /**
    * Returns a constant reference to the underlying host matrix.
    */
-  const host::HostMatrix &hostMatrix() const { return pimpl_->hostMatrix; }
-
-  /**
-   * Returns a reference to the underlying host matrix.
-   */
-  host::HostMatrix &hostMatrix() { return pimpl_->hostMatrix; }
+  const host::DistributedTileLayout &tileLayout() const {
+    return pimpl_->tileLayout;
+  }
 
   /**
    * Returns the number of tiles the matrix is distributed over.

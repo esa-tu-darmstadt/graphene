@@ -20,36 +20,33 @@
 
 #include "libgraphene/common/Concepts.hpp"
 #include "libgraphene/common/Type.hpp"
-#include "libgraphene/matrix/MatrixFormat.hpp"
 #include "libgraphene/matrix/details/MatrixBase.hpp"
-#include "libgraphene/matrix/details/crs/CRSAddressing.hpp"
-#include "libgraphene/matrix/host/details/HostMatrixBase.hpp"
+#include "libgraphene/matrix/details/ldu/LDUAddressing.hpp"
+#include "libgraphene/matrix/host/DistributedTileLayout.hpp"
 
-namespace graphene::matrix::crs {
+namespace graphene::matrix::ldu {
 
 /**
- * @brief A class representing a Compressed Row Storage (CRS) matrix.
- *
- * @tparam Type The data type of the elements stored in the CRSMatrix.
+ * @brief A class representing a matrix in LDU (lower-diagonal-upper) format.
  */
-struct CRSMatrix : public MatrixBase {
-  std::shared_ptr<CRSAddressing>
-      addressing;                  ///< Addressing scheme for the CRS matrix.
+struct LDUMatrix : public MatrixBase {
+  std::shared_ptr<LDUAddressing>
+      addressing;                  ///< Addressing scheme for the LDU matrix.
   Tensor offDiagonalCoefficients;  ///< Off-diagonal coefficients of the matrix.
   Tensor diagonalCoefficients;     ///< Diagonal coefficients of the matrix.
 
   /**
-   * @brief Construct a new CRSMatrix object.
+   * @brief Construct a new LDU matrix.
    *
-   * @param hostMatrix The host matrix this CRS matrix is based on.
-   * @param addressing The addressing scheme for the CRS matrix.
+   * @param hostMatrix The host matrix this LDU matrix is based on.
+   * @param addressing The addressing scheme for the LDU matrix.
    * @param offDiagonalCoefficients The off-diagonal coefficients of the matrix.
    * @param diagonalCoefficients The diagonal coefficients of the matrix.
    */
-  CRSMatrix(std::shared_ptr<host::HostMatrixBase> hostMatrix,
-            std::shared_ptr<CRSAddressing> addressing,
+  LDUMatrix(const host::DistributedTileLayout &tileLayout,
+            std::shared_ptr<LDUAddressing> addressing,
             Tensor offDiagonalCoefficients, Tensor diagonalCoefficients)
-      : MatrixBase(*hostMatrix),
+      : MatrixBase(tileLayout),
         addressing(std::move(addressing)),
         offDiagonalCoefficients(std::move(offDiagonalCoefficients)),
         diagonalCoefficients(std::move(diagonalCoefficients)) {}
@@ -62,7 +59,7 @@ struct CRSMatrix : public MatrixBase {
                   TypeRef intermediateType = nullptr,
                   bool withHalo = false) const override;
 
-  MatrixFormat getFormat() const final { return MatrixFormat::CRS; }
+  MatrixFormat getFormat() const final { return MatrixFormat::LDU; }
 };
 
-}  // namespace graphene::matrix::crs
+}  // namespace graphene::matrix::ldu

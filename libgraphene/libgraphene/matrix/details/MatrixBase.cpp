@@ -26,7 +26,7 @@
 #include "libgraphene/common/Shape.hpp"
 #include "libgraphene/common/TileMapping.hpp"
 #include "libgraphene/matrix/Norm.hpp"
-#include "libgraphene/matrix/host/TileLayout.hpp"
+#include "libgraphene/matrix/host/DistributedTileLayout.hpp"
 #include "libgraphene/matrix/host/details/HostMatrixBase.hpp"
 #include "libgraphene/util/Context.hpp"
 #include "libgraphene/util/DebugInfo.hpp"
@@ -56,24 +56,24 @@ void MatrixBase::exchangeHaloCells(Tensor &value) const {
   std::vector<poplar::Tensor> srcTensors;
   std::vector<poplar::Tensor> destTensors;
 
-  for (size_t tile = 0; tile < hostMatrix.numTiles(); ++tile) {
+  for (size_t tile = 0; tile < tileLayout.numTiles(); ++tile) {
     poplar::Tensor destTileTensor = value.tensorOnTile(tile);
-    const host::TileLayout &destLayout = hostMatrix.getTileLayout(tile);
-
-    for (auto &haloRegion : destLayout.haloRegions) {
+    const host::TilePartition &destPartition =
+        tileLayout.getTilePartition(tile);
+    for (auto &haloRegion : destPartition.haloRegions) {
       poplar::Tensor srcTileTensor = value.tensorOnTile(haloRegion->srcProc());
-      const host::TileLayout &srcLayout =
-          hostMatrix.getTileLayout(haloRegion->srcProc());
+      const host::TilePartition &srcPartition =
+          tileLayout.getTilePartition(haloRegion->srcProc());
 
       // Transfer this region from the source to the destination blockwise
       size_t srcLocalStartCelli =
-          srcLayout.globalToLocalRow.at(haloRegion->cells.front());
+          srcPartition.globalToLocalRow.at(haloRegion->cells.front());
       size_t srcLocalEndCelli =
-          srcLayout.globalToLocalRow.at(haloRegion->cells.back());
+          srcPartition.globalToLocalRow.at(haloRegion->cells.back());
       size_t destLocalStartCelli =
-          destLayout.globalToLocalRow.at(haloRegion->cells.front());
+          destPartition.globalToLocalRow.at(haloRegion->cells.front());
       size_t destLocalEndCelli =
-          destLayout.globalToLocalRow.at(haloRegion->cells.back());
+          destPartition.globalToLocalRow.at(haloRegion->cells.back());
 
       // Make sure that the cells are in the correct order for a blockwise copy
       // This validates the algorithm proposed in our paper.
@@ -111,7 +111,7 @@ void MatrixBase::exchangeHaloCells(Tensor &value) const {
 }
 
 bool MatrixBase::isVectorCompatible(const Tensor &value, bool withHalo) const {
-  DistributedShape shape = hostMatrix.getVectorShape(withHalo);
+  DistributedShape shape = tileLayout.getVectorShape(withHalo);
   TileMapping linearMapping = TileMapping::linearMappingWithShape(shape);
 
   if (value.shape().firstDimDistribution() != shape.firstDimDistribution())
@@ -124,12 +124,12 @@ bool MatrixBase::isVectorCompatible(const Tensor &value, bool withHalo) const {
 }
 
 Tensor MatrixBase::stripHaloCellsFromVector(const Tensor &x) const {
-  DistributedShape shapeWithoutHalo = hostMatrix.getVectorShape(false);
+  DistributedShape shapeWithoutHalo = tileLayout.getVectorShape(false);
 
   // If the shape is already correct, return the input
   if (x.shape() == shapeWithoutHalo) return x.same();
 
-  DistributedShape shapeWithHalo = hostMatrix.getVectorShape(true);
+  DistributedShape shapeWithHalo = tileLayout.getVectorShape(true);
 
   if (x.shape() != shapeWithHalo) {
     throw std::invalid_argument(
@@ -155,7 +155,7 @@ Tensor MatrixBase::vectorNorm(VectorNorm norm, const Tensor &x) const {
 
 Tensor MatrixBase::createUninitializedVector(TypeRef type,
                                              bool withHalo) const {
-  DistributedShape shape = hostMatrix.getVectorShape(withHalo);
+  DistributedShape shape = tileLayout.getVectorShape(withHalo);
   TileMapping mapping = TileMapping::linearMappingWithShape(shape);
   return Tensor::uninitialized(type, shape, mapping, "vector");
 }

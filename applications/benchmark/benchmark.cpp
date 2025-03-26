@@ -60,7 +60,7 @@ void load_vector(Tensor& x, const nlohmann::json& configField, Matrix& A,
   if (configField.is_number_float()) {
     x = configField.get<float>();
   } else if (configField.is_string()) {
-    HostTensor x_host = A.hostMatrix().loadVectorFromFile(
+    HostTensor x_host = A.tileLayout().loadVectorFromFile(
         Type::FLOAT32, configField.get<std::string>(), withHalo, name);
     x = x_host.copyToRemote().copyToTile();
   } else {

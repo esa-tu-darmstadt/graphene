@@ -25,12 +25,6 @@
 
 namespace graphene::matrix::host {
 
-/** A partitioning of the rows of a matrix. */
-struct Partitioning {
-  std::vector<size_t> rowToTile;
-  size_t numTiles;
-};
-
 /** A matrix in triplet (coordinate) format. */
 template <DataType Type>
 struct TripletMatrix {

@@ -22,6 +22,7 @@
 
 #include "libgraphene/common/Shape.hpp"
 #include "libgraphene/matrix/MatrixFormat.hpp"
+#include "libgraphene/matrix/host/DistributedTileLayout.hpp"
 #include "libgraphene/matrix/host/details/HostMatrixBase.hpp"
 
 namespace graphene::matrix::host {
@@ -47,9 +48,7 @@ class HostMatrix {
 
   bool multicolorRecommended() const { return pimpl->multicolorRecommended(); }
 
-  const TileLayout &getTileLayout(size_t proci) const {
-    return pimpl->getTileLayout(proci);
-  }
+  const DistributedTileLayout &getTileLayout() const { return *pimpl; }
 
   matrix::Matrix copyToTile() const;
 

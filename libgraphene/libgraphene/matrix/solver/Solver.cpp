@@ -62,7 +62,7 @@ bool Solver::shouldUseMulticolor(MultiColorMode mode) const {
     case MultiColorMode::Off:
       return false;
     case MultiColorMode::Auto:
-      return matrix().hostMatrix().multicolorRecommended();
+      return matrix().tileLayout().multicolorRecommended();
   }
   return false;
 }

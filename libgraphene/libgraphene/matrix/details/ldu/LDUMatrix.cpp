@@ -16,7 +16,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include "libgraphene/matrix/details/crs/CRSMatrix.hpp"
+#include "libgraphene/matrix/details/ldu/LDUMatrix.hpp"
 
 #include <iostream>
 #include <poplar/GraphElements.hpp>
@@ -38,10 +38,10 @@
 #include "libgraphene/util/DebugInfo.hpp"
 #include "libgraphene/util/PoplarHelpers.hpp"
 
-namespace graphene::matrix::crs {
-Tensor CRSMatrix::spmv(Tensor &x, TypeRef destType, TypeRef intermediateType,
+namespace graphene::matrix::ldu {
+Tensor LDUMatrix::spmv(Tensor &x, TypeRef destType, TypeRef intermediateType,
                        bool withHalo) const {
-  DebugInfo di("CRSMatrix");
+  DebugInfo di("LDUMatrix");
   // Make sure that x contains halo cells.
   if (!this->isVectorCompatible(x, true)) {
     throw std::runtime_error(
@@ -82,9 +82,9 @@ Tensor CRSMatrix::spmv(Tensor &x, TypeRef destType, TypeRef intermediateType,
   return result;
 }
 
-Tensor CRSMatrix::residual(Tensor &x, const Tensor &b, TypeRef destType,
+Tensor LDUMatrix::residual(Tensor &x, const Tensor &b, TypeRef destType,
                            TypeRef intermediateType, bool withHalo) const {
-  DebugInfo di("CRSMatrix");
+  DebugInfo di("LDUMatrix");
   // Make sure that x contains halo cells.
   if (!this->isVectorCompatible(x, true)) {
     throw std::runtime_error(
@@ -126,4 +126,4 @@ Tensor CRSMatrix::residual(Tensor &x, const Tensor &b, TypeRef destType,
 
   return result;
 }
-}  // namespace graphene::matrix::crs
+}  // namespace graphene::matrix::ldu
