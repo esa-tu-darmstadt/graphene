@@ -57,83 +57,6 @@ static id_t getEdgeWeight(Type edgeCoeff, Type maxEdgeCoeff,
                        absLinearInterp);  // Each edge weight must be at least 1
 }
 
-// Determines the number of bytes needed to store an unsigned integer value,
-// rounded up to the next power of two.
-constexpr size_t getUnsignedIntegerWidthForValue(size_t value) {
-  if (value == 0) return 0;
-  size_t width = 8;  // in bits
-  while ((1UL << width) < value) {
-    width *= 2;
-  }
-  return width / 8;
-}
-
-/// Constructs a host value by combining the given per-tile arrays, casting it
-/// to the concrete data type. Data is a range of ranges (aka a vector of
-/// vectors or similiar), where the outer range represents the tiles and the
-/// inner range the values of the tile.
-template <typename ConcreteType, std::ranges::input_range R>
-requires std::ranges::input_range<std::ranges::range_value_t<R>>
-void constructHostValueForType(HostTensor &hostValue, R data,
-                               std::string name) {
-  size_t numTiles = data.size();
-  FirstDimDistribution firstDimDistribution;
-  firstDimDistribution.reserve(numTiles);
-
-  size_t numValues = 0;
-  for (size_t tileID = 0; tileID < numTiles; ++tileID) {
-    firstDimDistribution[tileID] = data[tileID].size();
-    numValues += data[tileID].size();
-  }
-
-  DistributedShape shape =
-      DistributedShape::onTiles({numValues}, firstDimDistribution);
-  TileMapping mapping = TileMapping::linearMappingWithShape(shape);
-
-  // Combine the data to a single vector with the concrete data type
-  std::vector<ConcreteType> concreteData;
-  concreteData.reserve(numValues);
-  for (const auto &tile : data) {
-    std::copy(tile.begin(), tile.end(), std::back_inserter(concreteData));
-  }
-  TypeRef type = getType<ConcreteType>();
-  spdlog::trace(
-      "Constructing host value for {} of type {} for {} tiles with {} datums.",
-      name, type->str(), numTiles, numValues);
-  hostValue = HostTensor::createPersistent(
-      std::move(concreteData), std::move(shape), std::move(mapping), name);
-}
-template <std::ranges::input_range R>
-requires std::ranges::input_range<std::ranges::range_value_t<R>>
-void constructHostValue(HostTensor &hostValue, R data, std::string name) {
-  // Determine the required data type
-  size_t maxValue = 0;
-  for (const auto &tile : data) {
-    auto maxTileValue = std::max_element(tile.begin(), tile.end());
-    if (maxTileValue != tile.end()) {
-      maxValue = std::max(maxValue, *maxTileValue);
-    }
-  }
-  size_t width = getUnsignedIntegerWidthForValue(maxValue);
-
-  switch (width) {
-    case 0:
-    case 1:
-      constructHostValueForType<uint8_t>(hostValue, data, name);
-      break;
-    case 2:
-      constructHostValueForType<uint16_t>(hostValue, data, name);
-      break;
-    case 4:
-      constructHostValueForType<uint32_t>(hostValue, data, name);
-      break;
-    default:
-      throw std::runtime_error(fmt::format(
-          "Due to the size of the matrix, the CRS addressing requires {} bits, "
-          "but the IPU only support 8, 16, and 32 bit integers.",
-          width * 32));
-  }
-}
 }  // namespace
 
 namespace graphene::matrix::host::crs {
@@ -525,8 +448,8 @@ void CRSHostMatrix::decomposeValues(const CRSMatrixValues<Type> &globalMatrix) {
                                                    [](const auto &addressing) {
                                                      return addressing.rowPtr;
                                                    });
-  constructHostValue(rowPtr_, std::move(decomposedRowPtrs),
-                     this->name_ + "_rowPtr");
+  rowPtr_ = constructSmallestIntegerHostValue(std::move(decomposedRowPtrs),
+                                              this->name_ + "_rowPtr");
 
   // Decompose colInd
   spdlog::trace("Decomposing colInds");
@@ -534,8 +457,8 @@ void CRSHostMatrix::decomposeValues(const CRSMatrixValues<Type> &globalMatrix) {
                                                    [](const auto &addressing) {
                                                      return addressing.colInd;
                                                    });
-  constructHostValue(colInd_, std::move(decomposedColInds),
-                     this->name_ + "_colInd");
+  colInd_ = constructSmallestIntegerHostValue(std::move(decomposedColInds),
+                                              this->name_ + "_colInd");
 }
 
 template <FloatDataType Type>
@@ -744,10 +667,10 @@ void CRSHostMatrix::calculateColorAddressings() {
     spdlog::info("Multicolor is not recommended for this matrix");
   }
 
-  constructHostValue(this->colorSortAddr, std::move(colorSortAddr),
-                     this->name_ + "_colorSortAddr");
-  constructHostValue(this->colorSortStartPtr, std::move(colorSortStartPtr),
-                     this->name_ + "_colorSortStartPtr");
+  this->colorSortAddr = constructSmallestIntegerHostValue(
+      std::move(colorSortAddr), this->name_ + "_colorSortAddr");
+  this->colorSortStartPtr = constructSmallestIntegerHostValue(
+      std::move(colorSortStartPtr), this->name_ + "_colorSortStartPtr");
 }
 
 // Explicit instantiation of the CRSHostMatrix constructor for the supported
