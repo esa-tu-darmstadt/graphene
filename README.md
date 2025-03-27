@@ -1,13 +1,14 @@
 # Graphene Linear Algebra Framework
 
-Graphene is an open-source linear algebra framework designed for high-performance sparse linear algebra computations on GraphCore IPUs.
+Graphene is an open-source linear algebra framework designed for high-performance sparse linear algebra computations on GraphCore IPUs. The Intelligence Processing Unit (IPU) is a novel massively parallel architecture developed by GraphCore consisting of thousands of independent cores (also known as *tiles*) connected through an all-to-all communication fabric.
 
-Existing machine learning frameworks for the IPU, such as JAX or PyTorch, automatically distribute tensors and computations across available processors. Such automatic parallelization is effective for algorithms whose results remain consistent regardless of how computations are divided across multiple processors. However, in iterative matrix solvers, parallelizing the computations usually leads to differences in the numerical results of individual iterations, even though (hopefully) converging to the same solution. Graphene addresses this by giving users explicit control over how computations and tensors are distributed across the IPU tiles if needed. 
+Unlike machine learning frameworks for IPUs (JAX, PyTorch), which automatically distribute tensors to all tiles, Graphene provides programmers with explicit control over how tensors and computation is distributed across tiles — crucial for parallelizing some algorithms commonly found in HPC, like iterative sparse matrix solvers. 
 
-However, Graphene automatically partitions matrices row-wise across IPU tiles. Using this partitioning, the framework automatically determines the correct tensor distributions — known as `DistributedShape` and `TileMapping` — for matrix-related tensors. As a result, developers writing iterative solvers generally do not need to manage how matrices and vectors are distributed across IPU tiles manually.
+Our framework is built on top of GraphCore's Poplar framework and provides two Domain-Specific Languages (DSLs). **CodeDSL** is tile-centric, focusing on computational kernels that run directly on individual IPU tiles. It offers precise control over memory and computations local to each tile, aligning with the IPU’s tile-centric architecture. **TensorDSL** operates on tensors mapped across one or more tiles, providing a global perspective on entire tensors, regardless of their distribution across various tiles or IPUs. Graphene also supports extended precision types, allowing for higher precision computations on the IPU.
+
+The framework implements a suite of sparse linear solvers and preconditioners, including the following methods: Preconditioned Bi-Conjugate Gradient Stabilized, Mixed-Precision Iterative Refinement, Incomplete Lower-Upper Decomposition, Gauss-Seidel.
 
 For further details and technical insights, please refer to our associated scientific publication: T. Noack, L. Krüger, A. Koch (2025) *Accelerating Sparse Linear Solvers on Intelligence Processing Units*. In: 39th IEEE International Parallel and Distributed Processing Symposium (IPDPS 2025)
-
 
 ## Usage and Example
 
