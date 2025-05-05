@@ -37,8 +37,9 @@ Tensor RemoteTensor::copyToTile() const {
 
   poplar::Graph &graph = Context::graph();
 
-  poplar::Tensor tensor = graph.addVariable(
-      type_->poplarType(), shape_.globalShape().toPoplar(), debugStr_);
+  poplar::Tensor tensor =
+      graph.addVariable(type_->poplarEquivalentType()->poplarType(),
+                        shape_.globalShape().toPoplar(), debugStr_);
   graph.setTileMapping(tensor, tileMapping_.toPoplar());
   di.addOutput(tensor);
 
