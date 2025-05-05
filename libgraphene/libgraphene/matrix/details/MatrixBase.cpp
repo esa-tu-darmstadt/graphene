@@ -75,19 +75,17 @@ void MatrixBase::exchangeHaloCells(Tensor &value) const {
       size_t destLocalEndCelli =
           destPartition.globalToLocalRow.at(haloRegion->cells.back());
 
+#ifndef NDEBUG
       // Make sure that the cells are in the correct order for a blockwise copy
       // This validates the algorithm proposed in our paper.
-      // This is not a good place to put this check though
-      //   if (haloRegion->srcRegion.dstProcs.size() != 1) {
-      //     for (size_t i = 0; i < haloRegion->cells.size(); ++i) {
-      //       gcelli_t globalCelli = haloRegion->cells[i];
-      //       celli_t srcLocalCelli = srcHostMeshTile.localCelli(globalCelli);
-      //       celli_t destLocalCelli =
-      //       destHostMeshTile.localCelli(globalCelli); assert(srcLocalCelli ==
-      //       srcLocalStartCelli + i); assert(destLocalCelli ==
-      //       destLocalStartCelli + i);
-      //     }
-      //   }
+      for (size_t i = 0; i < haloRegion->cells.size(); ++i) {
+        size_t globalCelli = haloRegion->cells[i];
+        size_t srcLocalCelli = srcPartition.globalToLocalRow.at(globalCelli);
+        size_t destLocalCelli = destPartition.globalToLocalRow.at(globalCelli);
+        assert(srcLocalCelli == srcLocalStartCelli + i);
+        assert(destLocalCelli == destLocalStartCelli + i);
+      }
+#endif
 
       poplar::Tensor srcRegionTensor =
           srcTileTensor.slice(srcLocalStartCelli, srcLocalEndCelli + 1, 0);

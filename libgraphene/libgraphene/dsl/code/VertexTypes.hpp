@@ -17,7 +17,6 @@
  */
 
 #pragma once
-#include <spdlog/fmt/bundled/core.h>
 
 #include "libgraphene/common/Type.hpp"
 

@@ -18,7 +18,7 @@
 
 #include "libgraphene/dsl/common/details/Expressions.hpp"
 
-#include <spdlog/fmt/bundled/core.h>
+#include <fmt/format.h>
 #include <spdlog/spdlog.h>
 
 #include <numeric>

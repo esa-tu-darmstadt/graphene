@@ -18,6 +18,8 @@
 
 #include "VertexTypes.hpp"
 
+#include <fmt/format.h>
+
 #include <unordered_map>
 
 namespace graphene::codedsl {

@@ -18,7 +18,7 @@
 
 #pragma once
 
-#include <spdlog/fmt/bundled/core.h>
+#include <fmt/format.h>
 
 #include <array>
 #include <cstddef>
@@ -100,7 +100,8 @@ ret_t callFunctionWithUnpackedArgs(F& code, args_t args) {
 }
 
 template <typename T, typename U>
-concept invocable_with_args_of = std::invocable<T, U> ||  // callable with one U
+concept invocable_with_args_of =
+    std::invocable<T, U> ||                           // callable with one U
     std::invocable<T, U, U> ||                        // callable with two U's
     std::invocable<T, U, U, U> ||                     // callable with three U's
     std::invocable<T, U, U, U, U> ||                  // callable with four U's
@@ -110,5 +111,22 @@ concept invocable_with_args_of = std::invocable<T, U> ||  // callable with one U
     std::invocable<T, U, U, U, U, U, U, U, U> ||      // callable with eight U's
     std::invocable<T, U, U, U, U, U, U, U, U, U> ||   // callable with nine U's
     std::invocable<T, U, U, U, U, U, U, U, U, U, U>;  // callable with ten U's
+
+/**
+ * @brief Checks if class type Specialisation (the implicit concept
+ * argument) is indeed a specialisation of TemplateClass type
+ * (e.g. satisfied for TemplateClass=SomeLibrary and
+ * Specialisation=SomeLibrary<A, B>). Also accepts classes
+ * deriving from specialised TemplateClass.
+ *
+ * @tparam PartialSpecialisation optional partial specialisation
+ * of the TemplateClass to be required
+ */
+template <class Specialization, template <typename> class TemplateClass,
+          typename... PartialSpecialisation>
+concept Specializes = requires(Specialization s) {
+  []<typename... TemplateArgs>(
+      TemplateClass<PartialSpecialisation..., TemplateArgs...>&) {}(s);
+};
 
 }  // namespace graphene::detail

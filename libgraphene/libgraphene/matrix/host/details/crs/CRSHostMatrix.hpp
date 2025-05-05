@@ -80,6 +80,10 @@ class CRSHostMatrix : public HostMatrixBase {
   HostTensor offDiagValues_;
   HostTensor diagValues_;
 
+  std::vector<TilePartition> tilePartitions_;
+  Partitioning partitioning_;
+  bool multicolorRecommended_ = false;
+
  public:
   template <FloatDataType Type>
   explicit CRSHostMatrix(TripletMatrix<Type> tripletMatrix, size_t numTiles,
@@ -95,5 +99,13 @@ class CRSHostMatrix : public HostMatrixBase {
       TypeRef targetType = getType<Type>()) const;
 
   MatrixFormat getFormat() const override { return MatrixFormat::CRS; }
+
+  const TilePartition &getTilePartition(size_t tileId) const override;
+
+  /// Check if multicolor is recommended for this layout
+  bool multicolorRecommended() const override;
+
+  /// Return the row-to-tile mapping
+  const Partitioning &getPartitioning() const override;
 };
 }  // namespace graphene::matrix::host::crs

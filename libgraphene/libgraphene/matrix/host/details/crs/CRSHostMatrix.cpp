@@ -26,6 +26,7 @@
 #include <execution>
 #include <fast_matrix_market/app/triplet.hpp>
 #include <fstream>
+#include <libtwofloat/operators.hpp>
 #include <poplar/Graph.hpp>
 #include <ranges>
 #include <stdexcept>
@@ -43,7 +44,6 @@
 #include "libgraphene/matrix/host/details/CoordinateFormat.hpp"
 #include "libgraphene/matrix/host/details/MatrixMarket.hpp"
 #include "libgraphene/util/Tracepoint.hpp"
-#include "libtwofloat/operators.hpp"
 
 using namespace graphene;
 
@@ -71,7 +71,7 @@ CRSHostMatrix::CRSHostMatrix(TripletMatrix<Type> tripletMatrix, size_t numTiles,
 
   this->globalAddressing_ = std::move(globalAddressing);
   this->partitioning_ = std::move(
-      calculatePartitioning(numTiles_, globalMatrixValues, globalAddressing_));
+      calculatePartitioning(numTiles, globalMatrixValues, globalAddressing_));
 
   this->tilePartitions_ =
       std::move(calculateTileLayouts(this->partitioning_, globalAddressing_));
@@ -672,6 +672,19 @@ void CRSHostMatrix::calculateColorAddressings() {
       std::move(colorSortAddr), this->name() + "_colorSortAddr");
   this->colorSortStartPtr = constructSmallestIntegerHostValue(
       std::move(colorSortStartPtr), this->name() + "_colorSortStartPtr");
+}
+
+const TilePartition &CRSHostMatrix::getTilePartition(size_t tileId) const {
+  return tilePartitions_[tileId];
+}
+
+/// Check if multicolor is recommended for this layout
+bool CRSHostMatrix::multicolorRecommended() const {
+  return multicolorRecommended_;
+}
+
+const Partitioning &CRSHostMatrix::getPartitioning() const {
+  return partitioning_;
 }
 
 // Explicit instantiation of the CRSHostMatrix constructor for the supported

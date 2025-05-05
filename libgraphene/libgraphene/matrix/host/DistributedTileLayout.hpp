@@ -133,28 +133,36 @@ class TilePartition {
   std::unordered_map<size_t, size_t> globalToLocalRow;
 };
 
-/// Manages the distribution of matrix data across multiple IPU tiles, providing
-/// functionality for vector decomposition and distribution.
+/// Interface that defines the layout of a distributed matrix, i.e., how the
+/// matrix is partitioned row-wise across multiple tiles.
 class DistributedTileLayout {
  public:
-  DistributedTileLayout(size_t numTiles) : numTiles_(numTiles) {}
+  DistributedTileLayout() = default;
+  virtual ~DistributedTileLayout() = default;
+
+  // ----------------------------------------------------
+  // Interface methods, to be implemented by derived classes
+  // ----------------------------------------------------
 
   /// Retrieve the tile partition for a specific tile
-  const TilePartition &getTilePartition(size_t tileId) const {
-    return tilePartitions_[tileId];
-  }
-
-  /// Get a reference to all tile partitions
-  const std::vector<TilePartition> &getTilePartitions() const {
-    return tilePartitions_;
-  }
+  virtual const TilePartition &getTilePartition(size_t tileId) const = 0;
 
   /// Get the number of tiles in the layout
-  size_t numTiles() const { return numTiles_; }
+  virtual size_t numTiles() const = 0;
+
+  /// Check if multicolor is recommended for this layout
+  virtual bool multicolorRecommended() const = 0;
+
+  /// Get the row-to-tile mapping
+  virtual const Partitioning &getPartitioning() const = 0;
 
   /// Get the distributed shape for a vector compatible with this layout
   DistributedShape getVectorShape(bool withHalo = false,
                                   size_t width = 0) const;
+
+  // ----------------------------------------------------
+  // Helper methods
+  // ----------------------------------------------------
 
   /// Decompose a contiguous vector into a distributed tensor based on this
   /// layout
@@ -168,28 +176,6 @@ class DistributedTileLayout {
   HostTensor loadVectorFromFile(TypeRef type, std::string fileName,
                                 bool withHalo = false,
                                 std::string name = "vector") const;
-
-  /// Set multicolor recommendation flag
-  void setMulticolorRecommended(bool recommend) {
-    multicolorRecommended_ = recommend;
-  }
-
-  /// Check if multicolor is recommended for this layout
-  bool multicolorRecommended() const { return multicolorRecommended_; }
-
-  /// Set partitioning type
-  void setPartitioning(Partitioning partitioning) {
-    partitioning_ = partitioning;
-  }
-
-  /// Get partitioning type
-  Partitioning getPartitioning() const { return partitioning_; }
-
- protected:
-  size_t numTiles_;
-  std::vector<TilePartition> tilePartitions_;
-  Partitioning partitioning_;
-  bool multicolorRecommended_ = false;
 };
 
 }  // namespace graphene::matrix::host

@@ -33,7 +33,7 @@ class HostMatrixBase : public Runtime::HostResource,
                        public DistributedTileLayout {
  public:
   HostMatrixBase(size_t numTiles, std::string name)
-      : DistributedTileLayout(numTiles), name_(std::move(name)) {}
+      : DistributedTileLayout(), name_(std::move(name)), numTiles_(numTiles) {}
 
   HostMatrixBase(const HostMatrixBase &other) = delete;
   HostMatrixBase(HostMatrixBase &&other) = delete;
@@ -44,9 +44,11 @@ class HostMatrixBase : public Runtime::HostResource,
   virtual MatrixFormat getFormat() const = 0;
 
   const std::string &name() const { return name_; }
+  size_t numTiles() const override { return numTiles_; }
 
  private:
   std::string name_;
+  size_t numTiles_;
 };
 
 }  // namespace host

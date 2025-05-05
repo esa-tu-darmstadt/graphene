@@ -105,9 +105,10 @@ void TilePartition::calculateRowMapping() {
 DistributedShape DistributedTileLayout::getVectorShape(bool withHalo,
                                                        size_t width) const {
   FirstDimDistribution firstDimDistribution;
-  firstDimDistribution.reserve(tilePartitions_.back().tileId);
+  firstDimDistribution.reserve(numTiles());
   size_t numRows = 0;
-  for (const auto &tile : tilePartitions_) {
+  for (size_t i = 0; i < numTiles(); ++i) {
+    const TilePartition &tile = getTilePartition(i);
     size_t rowsOnThisTile = 0;
     rowsOnThisTile += tile.numInteriorRows();
     rowsOnThisTile += tile.numSeperatorRows();
@@ -134,7 +135,8 @@ HostTensor DistributedTileLayout::decomposeVector(
   // Decompose the vector
   std::vector<Type> decomposedVector;
   decomposedVector.reserve(shape[0]);
-  for (const auto &tile : tilePartitions_) {
+  for (size_t i = 0; i < numTiles(); ++i) {
+    const TilePartition &tile = getTilePartition(i);
     for (size_t localRow = 0; localRow < tile.localToGlobalRow.size();
          ++localRow) {
       size_t globalRow = tile.localToGlobalRow[localRow];
