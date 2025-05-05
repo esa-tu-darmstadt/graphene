@@ -12,3 +12,5 @@ archive.a
 debug.cbor
 
 **/logs/
+
+CMakeUserPresets.json
