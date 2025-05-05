@@ -30,14 +30,11 @@ void graphene::addCodelets(poplar::Graph &graph,
                            poplar::program::Sequence &prog) {
   popops::addCodelets(graph);
 
-  Dl_info dlInfo;
-  if (dladdr((void *)::graphene::addCodelets, &dlInfo) == 0) {
-    throw std::runtime_error("Could not find path to libGrapheneCodelet.so");
-  }
+#ifndef GRAPHENE_PRECOMPILED_CODELETS_PATH
+#error "GRAPHENE_PRECOMPILED_CODELETS_PATH not defined"
+#endif
 
-  std::string path(dlInfo.dli_fname);
-  path = path.substr(0, path.find_last_of('/') + 1);
-  path = path + "ipu/GrapheneCodeletsIPU.gp";
+  std::string path = GRAPHENE_PRECOMPILED_CODELETS_PATH;
 
   graph.addCodelets(path, poplar::CodeletFileType::Object);
 
