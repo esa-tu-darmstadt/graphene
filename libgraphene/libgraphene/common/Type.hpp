@@ -374,7 +374,7 @@ namespace details {
 template <typename T, typename F, typename... Args>
 concept TypeSwitchInvocable = requires(F &&f, Args &&...args) {
   // We only test for the expression below; if it's invalid, it fails SFINAE.
-  {std::forward<F>(f).template operator()<T>(std::forward<Args>(args)...)};
+  { std::forward<F>(f).template operator()<T>(std::forward<Args>(args)...) };
 };
 }  // namespace details
 
@@ -392,8 +392,8 @@ decltype(auto) typeSwitch(TypeRef type, F &&f, Args &&...args) {
                                   ".");                                      \
   }
 
-  DISPATCH(Type::BOOL, bool)
-  DISPATCH(Type::FLOAT16, __fp16)  // Does this work?
+  DISPATCH(Type::BOOL, uint8_t)  // bool is 1 byte in Poplar
+  // DISPATCH(Type::FLOAT16, _Float16)  // Does this work?
   DISPATCH(Type::FLOAT32, float)
   DISPATCH(Type::FLOAT64, double)
   DISPATCH(Type::TWOFLOAT32, ::twofloat::two<float>)
