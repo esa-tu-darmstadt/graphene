@@ -65,7 +65,7 @@ void load_vector(Tensor& x, const nlohmann::json& configField, Matrix& A,
     x = x_host.copyToRemote().copyToTile();
   } else {
     throw std::runtime_error(fmt::format(
-        "Invalid config value for vector {}: {}", name, configField));
+        "Invalid config value for vector {}: {}", name, configField.dump()));
   }
 }
 
