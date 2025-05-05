@@ -1,4 +1,4 @@
-add_library(GrapheneCodeDSL SHARED 
+add_library(GrapheneCodeDSL 
     "CodeGen.cpp" 
     "Operators.cpp" 
     "VertexTypes.cpp"
@@ -10,4 +10,4 @@ add_library(GrapheneCodeDSL SHARED
 )
 target_link_libraries(GrapheneCodeDSL PUBLIC GrapheneCommon GrapheneDSLCommon GrapheneUtil)
 
-add_library(Graphene::DSL::Code ALIAS GrapheneCodeDSL)
+add_library(graphene::code-dsl ALIAS GrapheneCodeDSL)

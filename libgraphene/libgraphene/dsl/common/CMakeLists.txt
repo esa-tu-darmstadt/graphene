@@ -1,6 +1,6 @@
-add_library(GrapheneDSLCommon SHARED 
+add_library(GrapheneDSLCommon 
     "details/Expressions.cpp"
 )
 target_link_libraries(GrapheneDSLCommon PUBLIC GrapheneCommon)
 
-add_library(Graphene::DSL::Common ALIAS GrapheneDSLCommon)
+add_library(graphene::dsl-common ALIAS GrapheneDSLCommon)

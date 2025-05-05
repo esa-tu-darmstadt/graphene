@@ -1,9 +1,16 @@
-cmake_minimum_required(VERSION 3.26)
+cmake_minimum_required(VERSION 3.25)
 project("graphene" LANGUAGES CXX)
 include(CTest)
 
 find_package(poplar REQUIRED)
 get_target_property(POPC_EXECUTABLE popc_bin LOCATION)
+
+find_package(nlohmann_json REQUIRED)
+find_package(twofloat CONFIG REQUIRED)
+find_package(spdlog CONFIG REQUIRED)
+find_package(fmt CONFIG REQUIRED)
+find_package(metis CONFIG REQUIRED)
+find_package(fast_matrix_market CONFIG REQUIRED)
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake" )
 include(AddGPLibrary)

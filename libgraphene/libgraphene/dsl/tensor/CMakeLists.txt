@@ -1,4 +1,4 @@
-add_library(GrapheneTensorDSL SHARED "RemoteTensor.cpp" 
+add_library(GrapheneTensorDSL "RemoteTensor.cpp" 
     "Tensor.cpp" 
     "Operators.cpp" 
     "Expression.cpp" 
@@ -8,7 +8,7 @@ add_library(GrapheneTensorDSL SHARED "RemoteTensor.cpp"
 )
 target_link_libraries(GrapheneTensorDSL PUBLIC GrapheneCommon GrapheneUtil GrapheneCodeDSL popops)
 
-add_library(Graphene::DSL::Tensor ALIAS GrapheneTensorDSL)
+add_library(graphene::tensor-dsl ALIAS GrapheneTensorDSL)
 
 # Contains functions inlined into the operators
 target_link_libraries(GrapheneTensorDSL PUBLIC GrapheneDSLCommon)

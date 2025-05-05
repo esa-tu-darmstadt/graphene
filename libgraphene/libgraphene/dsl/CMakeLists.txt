@@ -4,5 +4,5 @@ add_subdirectory(tensor)
 
 # Add tests
 add_executable(GrapheneDSLTests tensor/tests/TensorTests.cpp)
-target_link_libraries(GrapheneDSLTests GrapheneTensorDSL GrapheneUtil GrapheneCommon gtest_main)
+target_link_libraries(GrapheneDSLTests GrapheneTensorDSL GrapheneUtil GrapheneCommon gtest_main gtest::gtest)
 gtest_discover_tests(GrapheneDSLTests)

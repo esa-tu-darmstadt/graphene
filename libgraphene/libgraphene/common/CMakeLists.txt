@@ -1,6 +1,6 @@
-add_library(GrapheneCommon SHARED "Type.cpp")
-target_link_libraries(GrapheneCommon PUBLIC GrapheneHeaders)
+add_library(GrapheneCommon "Type.cpp")
+target_link_libraries(GrapheneCommon PUBLIC GrapheneHeaders spdlog::spdlog twofloat::twofloat)
 
-add_library(Graphene::Common ALIAS GrapheneCommon)
+add_library(graphene::common ALIAS GrapheneCommon)
 
 add_subdirectory(tests)

@@ -18,7 +18,7 @@
 
 #pragma once
 
-#include <spdlog/fmt/bundled/core.h>
+#include <fmt/format.h>
 
 #include <limits>
 #include <nlohmann/json_fwd.hpp>

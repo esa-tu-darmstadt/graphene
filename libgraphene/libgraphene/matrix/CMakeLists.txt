@@ -1,4 +1,4 @@
-add_library(GrapheneMatrix SHARED 
+add_library(GrapheneMatrix 
     "Norm.cpp"
     "Matrix.cpp"
     "details/crs/CRSMatrix.cpp"
@@ -24,7 +24,11 @@ add_library(GrapheneMatrix SHARED
     "solver/pbicgstab/Configuration.cpp"
     "solver/restarter/Solver.cpp"
     "solver/restarter/Configuration.cpp")
-target_link_libraries(GrapheneMatrix PRIVATE fast_matrix_market::fast_matrix_market)
+target_link_libraries(GrapheneMatrix PRIVATE fast_matrix_market::fast_matrix_market metis::metis spdlog::spdlog fmt::fmt tbb)
 target_link_libraries(GrapheneMatrix PUBLIC GrapheneCommon GrapheneUtil GrapheneTensorDSL nlohmann_json::nlohmann_json)
 
-add_library(Graphene::Matrix ALIAS GrapheneMatrix)
+# Print info abvout trhe nlohmann_json package
+get_target_property(nlohmann_json_INCLUDE_DIRS nlohmann_json::nlohmann_json INTERFACE_INCLUDE_DIRECTORIES)
+message(STATUS "nlohmann_json_INCLUDE_DIRS: ${nlohmann_json_INCLUDE_DIRS}")
+
+add_library(graphene::matrix ALIAS GrapheneMatrix)

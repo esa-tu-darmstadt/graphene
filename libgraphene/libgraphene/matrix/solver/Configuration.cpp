@@ -18,7 +18,7 @@
 
 #include "libgraphene/matrix/solver/Configuration.hpp"
 
-#include <spdlog/fmt/bundled/core.h>
+#include <fmt/format.h>
 
 #include <nlohmann/json.hpp>
 
@@ -28,6 +28,12 @@
 #include "libgraphene/matrix/solver/iterative-refinement/Configuration.hpp"
 #include "libgraphene/matrix/solver/pbicgstab/Configuration.hpp"
 #include "libgraphene/matrix/solver/restarter/Configuration.hpp"
+
+namespace nlohmann {
+
+auto format_as(const json& j) { return j.dump(); }
+
+}  // namespace nlohmann
 
 namespace graphene::matrix::solver {
 template <>

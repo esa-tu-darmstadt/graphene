@@ -1,15 +1,6 @@
-[submodule "libgraphene/libs/json"]
-	path = libgraphene/libs/json
-	url = https://github.com/nlohmann/json.git
 [submodule "libgraphene/libs/twofloat"]
 	path = libgraphene/libs/twofloat
 	url = https://github.com/esa-tu-darmstadt/twofloat.git
 [submodule "libgraphene/libs/ipu-thread-sync"]
 	path = libgraphene/libs/ipu-thread-sync
 	url = https://github.com/timnoack/ipu-thread-sync.git
-[submodule "applications/libs/CLI11"]
-	path = applications/libs/CLI11
-	url = https://github.com/CLIUtils/CLI11.git
-[submodule "libgraphene/libs/fast_matrix_market"]
-	path = libgraphene/libs/fast_matrix_market
-	url = https://github.com/alugowski/fast_matrix_market.git
