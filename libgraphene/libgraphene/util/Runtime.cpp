@@ -304,4 +304,5 @@ std::filesystem::path Runtime::getRuntimeLibIncludeDir(RuntimeLib lib) const {
     case RuntimeLib::IpuThreadSync:
       return ipuThreadSyncSourceDir_;
   }
+  throw std::runtime_error("Invalid runtime library");
 }
