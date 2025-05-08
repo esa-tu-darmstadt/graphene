@@ -66,6 +66,7 @@ void graphene::codedsl::ExecuteAsMapped(
   // Emit the necessary includes
   CodeGen::emitInclude("ipu_intrinsics", true);
   CodeGen::emitInclude("poplar/Vertex.hpp", true);
+  CodeGen::emitInclude("array", true);
   CodeGen::emitInclude("libtwofloat/arithmetics/double-word-arithmetic.hpp",
                        false);
   CodeGen::emitInclude("libtwofloat/operators.hpp", false);

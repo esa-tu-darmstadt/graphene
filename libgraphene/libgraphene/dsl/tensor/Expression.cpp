@@ -34,6 +34,7 @@
 #include "libgraphene/dsl/code/Execute.hpp"
 #include "libgraphene/dsl/code/Operators.hpp"
 #include "libgraphene/dsl/code/Value.hpp"
+#include "libgraphene/dsl/code/types/ArrayType.hpp"
 #include "libgraphene/dsl/tensor/Execute.hpp"
 #include "libgraphene/dsl/tensor/Tensor.hpp"
 #include "libgraphene/dsl/tensor/details/Expressions.hpp"
@@ -174,10 +175,21 @@ struct GenerateCodeForExpressionVisitor : detail::ExpressionVisitor {
       : inputs(inputs) {}
 
   std::any visit(detail::ConstExpr &expr, std::any indices) final {
-    // Indices are ignored, i.e., the constant is broadcasted to all elements
-    (void)indices;
-    return (codedsl::Value)codedsl::Expression(expr.type(),
-                                               expr.valueAsString());
+    // If the expression is a scalar, we can just return the value. Scalars are
+    // broadcasted to all elements in the output tensor.
+    // if (expr.shape().numElements() == 1)
+    //   return (codedsl::Value)codedsl::Expression(expr.type(),
+    //                                              expr.valueAsString());
+
+    auto indexVector = std::any_cast<std::vector<codedsl::Value>>(indices);
+    DistributedShape inputShape = expr.shape();
+    codedsl::Value flattenedIndex = getFlattenedIndex(indexVector, inputShape);
+
+    TypeRef arrayType =
+        codedsl::ArrayType::get(expr.type(), expr.shape().numElements());
+    codedsl::Value constantArrayValue =
+        (codedsl::Value)codedsl::Expression(arrayType, expr.valueAsString());
+    return constantArrayValue[flattenedIndex];
   }
 
   std::any visit(detail::InputExpr &expr, std::any indices) final {
@@ -610,7 +622,9 @@ Expression Expression::reduce(size_t dim, ReduceOperation op) const {
   // Reduce between tiles on the same IPU if first dimension is reduced
   if (dim != 0) return stage2;
 
-  Expression stage3 = stage2.reduceGrouped(1472, op);
+  Expression stage2_1 = stage2.reduceGrouped(1472 / 4, op);
+  Expression stage2_2 = stage2_1.reduceGrouped(1472 / 2, op);
+  Expression stage3 = stage2_2.reduceGrouped(1472, op);
   Expression stage4 = stage3.reduceGrouped(999999999, op);
 
   return stage4;
@@ -688,8 +702,16 @@ template <DataType T>
 Expression::Expression(T value)
     : expr_(std::make_unique<detail::ConstExpr>(value)) {}
 
+template <DataType Type>
+Expression::Expression(const std::initializer_list<Type> &values,
+                       std::optional<TensorShape> shape)
+    : expr_(std::make_unique<detail::ConstExpr>(values, shape)) {}
+
 // Explicit instantiation
-#define INSTANTIATE(T) template Expression::Expression(T value);
+#define INSTANTIATE(T)                                                    \
+  template Expression::Expression(T value);                               \
+  template Expression::Expression(const std::initializer_list<T> &values, \
+                                  std::optional<TensorShape> shape);
 
 INSTANTIATE(float)
 INSTANTIATE(double)
@@ -701,6 +723,8 @@ INSTANTIATE(uint16_t)
 INSTANTIATE(int16_t)
 INSTANTIATE(uint32_t)
 INSTANTIATE(int32_t)
+INSTANTIATE(uint64_t)
+INSTANTIATE(int64_t)
 #undef INSTANTIATE
 
 }  // namespace graphene

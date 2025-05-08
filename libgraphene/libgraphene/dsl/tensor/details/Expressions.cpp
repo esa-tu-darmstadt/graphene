@@ -20,10 +20,12 @@
 
 #include <iomanip>
 #include <ios>
+#include <sstream>
 #include <string>
 
 #include "libgraphene/common/Concepts.hpp"
 #include "libgraphene/common/Hash.hpp"
+#include "libgraphene/common/Shape.hpp"
 #include "libgraphene/common/TileMapping.hpp"
 #include "libgraphene/dsl/common/details/Expressions.hpp"
 #include "libgraphene/dsl/tensor/Expression.hpp"
@@ -194,10 +196,14 @@ size_t CastExpr::hash() const {
 //--------------------------------------------------------------------------
 // ConstExpr implementation
 //--------------------------------------------------------------------------
-ConstExpr::ConstExpr(std::any value, std::string str, TypeRef type)
-    : ExpressionBase(type), value_(value), str_(str) {}
+ConstExpr::ConstExpr(std::any value, std::string str, TypeRef type,
+                     TensorShape shape)
+    : ExpressionBase(type), value_(value), str_(str), shape_(shape) {}
 
-std::string ConstExpr::valueAsString() const { return str_; }
+std::string ConstExpr::valueAsString() const {
+  return "std::array<" + type()->str() + ", " +
+         std::to_string(shape_.numElements()) + ">{" + str_ + "}";
+}
 
 std::string ConstExpr::getName() const { return "const"; }
 
@@ -205,12 +211,14 @@ std::string ConstExpr::getAsString() const {
   return "const<" + type()->str() + ">(" + str_ + ")";
 }
 
-DistributedShape ConstExpr::shape() const { return DistributedShape::scalar(); }
+DistributedShape ConstExpr::shape() const {
+  return DistributedShape::onSingleTile(shape_);
+}
 
 TileMapping ConstExpr::tileMapping() const { return {}; }
 
 std::unique_ptr<ExpressionBase> ConstExpr::clone() const {
-  return std::make_unique<ConstExpr>(value_, str_, type());
+  return std::make_unique<ConstExpr>(value_, str_, type(), shape_);
 }
 
 std::any ConstExpr::accept(ExpressionVisitor& visitor, std::any arg) {
@@ -235,17 +243,71 @@ std::string floatToString(doubleword value) {
   return ss.str();
 }
 
+template <typename T>
+std::string valueToString(const T& value) {
+  if constexpr (std::is_same_v<T, float>) {
+    return floatToString(value);
+  } else if constexpr (std::is_same_v<T, double>) {
+    return floatToString(value);
+  } else if constexpr (std::is_same_v<T, doubleword>) {
+    return floatToString(value);
+  } else {
+    return std::to_string(value);
+  }
+}
+
+template <typename T>
+std::string valuesToString(const std::initializer_list<T>& values) {
+  std::stringstream ss;
+  ss << "{";
+  for (size_t i = 0; i < values.size(); ++i) {
+    ss << valueToString(values.begin()[i]);
+    if (i < values.size() - 1) {
+      ss << ", ";
+    }
+  }
+  ss << "}";
+  return ss.str();
+}
+
 }  // namespace
 
-/// Constructor for floating point types
-ConstExpr::ConstExpr(float value)
-    : ConstExpr(value, floatToString(value), Type::FLOAT32) {}
-ConstExpr::ConstExpr(double value)
-    : ConstExpr(value, floatToString(value), Type::FLOAT64) {}
-ConstExpr::ConstExpr(doubleword value)
-    : ConstExpr(value, floatToString(value), Type::TWOFLOAT32) {}
+template <DataType T>
+ConstExpr::ConstExpr(T value)
+    : ExpressionBase(getType<T>()),
+      value_(value),
+      str_(valueToString(value)),
+      shape_({1}) {}
+
+template <DataType T>
+ConstExpr::ConstExpr(const std::initializer_list<T>& values,
+                     std::optional<TensorShape> shape)
+    : ExpressionBase(getType<T>()),
+      value_(std::vector<T>(values)),
+      str_(valuesToString(values)),
+      shape_(shape.value_or(TensorShape{values.size()})) {}
 
 size_t ConstExpr::hash() const { return graphene::hash("const", type(), str_); }
+
+// Explicit instantiation
+#define INSTANTIATE(T)                                                  \
+  template ConstExpr::ConstExpr(T value);                               \
+  template ConstExpr::ConstExpr(const std::initializer_list<T>& values, \
+                                std::optional<TensorShape> shape);
+
+INSTANTIATE(float)
+INSTANTIATE(double)
+INSTANTIATE(doubleword)
+INSTANTIATE(bool)
+INSTANTIATE(uint8_t)
+INSTANTIATE(int8_t)
+INSTANTIATE(uint16_t)
+INSTANTIATE(int16_t)
+INSTANTIATE(uint32_t)
+INSTANTIATE(int32_t)
+INSTANTIATE(uint64_t)
+INSTANTIATE(int64_t)
+#undef INSTANTIATE
 
 //--------------------------------------------------------------------------
 // PermuteExpr implementation

@@ -168,20 +168,18 @@ class CastExpr : public ExpressionBase {
 class ConstExpr : public ExpressionBase {
   std::any value_;
   std::string str_;
+  TensorShape shape_;
 
  public:
   ConstExpr() = delete;
-  ConstExpr(std::any value, std::string str, TypeRef type);
+  ConstExpr(std::any value, std::string str, TypeRef type, TensorShape shape);
 
-  /// Constructor for integer types
   template <DataType T>
-  requires(std::is_integral<T>::value) explicit ConstExpr(T value)
-      : ConstExpr(value, std::to_string(value), getType<T>()) {}
+  explicit ConstExpr(T value);
 
-  /// Constructor for floating point types
-  explicit ConstExpr(float value);
-  explicit ConstExpr(double value);
-  explicit ConstExpr(doubleword value);
+  template <DataType T>
+  explicit ConstExpr(const std::initializer_list<T>& values,
+                     std::optional<TensorShape> shape = std::nullopt);
 
   ~ConstExpr() override = default;
 

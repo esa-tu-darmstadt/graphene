@@ -89,6 +89,18 @@ class Expression {
   Expression(Type value);
 
   /**
+   * @brief Construct an expression from a list of constant values and a shape.
+   * The type of the expression is inferred from type of the values. The shape
+   * is optional and defaults to a one-dimensional shape with the size of the
+   * list.
+   *
+   * @param value The constant value.
+   */
+  template <DataType Type>
+  Expression(const std::initializer_list<Type> &values,
+             std::optional<TensorShape> shape = std::nullopt);
+
+  /**
    * @brief Construct an expression from a poplar tensor. The type of the
    * expression is inferred from the tensor, or explicitly provided if the
    * poplar type is ambiguous (i.e., LONGLONG can be int64_t, double, or
