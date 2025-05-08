@@ -7,6 +7,7 @@ add_library(GrapheneCodeDSL
     "Execute.cpp"
     "Vertex.cpp"
     "Function.cpp"
+    "types/ArrayType.cpp"
 )
 target_link_libraries(GrapheneCodeDSL PUBLIC GrapheneCommon GrapheneDSLCommon GrapheneUtil)
 
