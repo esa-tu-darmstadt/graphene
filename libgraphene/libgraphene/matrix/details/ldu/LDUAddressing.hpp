@@ -27,23 +27,67 @@
 
 namespace graphene::matrix::ldu {
 
+/// \brief Represents the addressing of a LDU matrix. The LDU format is used in
+/// OpenFOAM and is handy to represent meshes and matrices in a finite volume
+/// methods.
+/// \details The combination of lowerAddr, upperAddr, and ownerStartAddr allows
+/// to address the faces/coefficients that are owned by a cell/row. This only
+/// coveres half of the addressing. The other half - i.e. the faces/coefficients
+/// that are neighboring a cell/row) - is addressed by the \ref
+/// neighbourStartPtr and
+/// \ref neighbourColInd arrays. These arrays form a CRS-like sparse matrix that
+/// allow to look up the neighboring cells/rows of a cell/row.
+/// See the OpenFOAM documentation for more details:
+/// https://openfoamwiki.net/index.php/OpenFOAM_guide/Matrices_in_OpenFOAM
 struct LDUAddressing : matrix::Addressing {
-  /** For each row, the start index of the row in the \ref colInd array */
-  Tensor rowPtr;
+  /// For each face, the index of the cell that owns the face
+  Tensor lowerAddr;
 
-  /** The column indices of each non-zero element */
-  Tensor colInd;
+  /// For each face, the index of the cell that is neighboring the face
+  /// (i.e. the cell that is not the owner of the face)
+  Tensor upperAddr;
+
+  /// For each cell, the index of the first face that is owned by the cell
+  Tensor ownerStartAddr;
+
+  /// For each cell, the index of its first element in the \ref neighbourColInd
+  /// array. Called \ref losortStartAddr in OpenFOAM.
+  Tensor neighbourStartPtr;
+
+  /// The indices of the faces neighboring a cell. Indexed by the
+  /// \ref neighbourStartPtr array. Called \ref losortAddr in OpenFOAM.
+  Tensor neighbourColInd;
+
+  /// For each boundary face, the index of the cell that the face is connected
+  /// to. Each boundary face is connected to a single cell.
+  Tensor patchAddr;
 
   /** Optional coloring of the matrix */
   std::optional<Coloring> coloring;
 
-  LDUAddressing(Tensor rowPtr, Tensor colInd)
-      : rowPtr(std::move(rowPtr)), colInd(std::move(colInd)) {}
+  LDUAddressing(Tensor lowerAddr, Tensor upperAddr, Tensor ownerStartAddr,
+                Tensor neighbourStartPtr, Tensor neighbourColInd,
+                Tensor patchAddr,
+                std::optional<Coloring> coloring = std::nullopt)
+      : lowerAddr(std::move(lowerAddr)),
+        upperAddr(std::move(upperAddr)),
+        ownerStartAddr(std::move(ownerStartAddr)),
+        neighbourStartPtr(std::move(neighbourStartPtr)),
+        neighbourColInd(std::move(neighbourColInd)),
+        patchAddr(std::move(patchAddr)),
+        coloring(std::move(coloring)) {
+    assert(this->lowerAddr.numElements() == this->upperAddr.numElements());
+    assert(this->ownerStartAddr.numElements() ==
+           this->neighbourStartPtr.numElements());
+  }
 
-  LDUAddressing(Tensor rowPtr, Tensor colInd, Coloring coloring)
-      : rowPtr(std::move(rowPtr)),
-        colInd(std::move(colInd)),
-        coloring(std::move(coloring)) {}
+  // Addressings should usually not be copied. Deleting the copy
+  // constructor and assignment operator to prevent us from accidentally
+  // copying them.
+  LDUAddressing(const LDUAddressing&) = delete;
+  LDUAddressing(LDUAddressing&&) = default;
+  LDUAddressing& operator=(const LDUAddressing&) = delete;
+  LDUAddressing& operator=(LDUAddressing&&) = default;
 };
 
 }  // namespace graphene::matrix::ldu

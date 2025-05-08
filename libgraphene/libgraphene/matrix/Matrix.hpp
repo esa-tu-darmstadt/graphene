@@ -26,6 +26,7 @@
 #include "libgraphene/dsl/tensor/Tensor.hpp"
 #include "libgraphene/matrix/details/MatrixBase.hpp"
 #include "libgraphene/matrix/details/crs/CRSMatrix.hpp"
+#include "libgraphene/matrix/details/ldu/LDUMatrix.hpp"
 #include "libgraphene/matrix/host/DistributedTileLayout.hpp"
 
 namespace graphene::matrix {
@@ -53,6 +54,10 @@ class Matrix {
   /** Constructs a sparse matrix in CRS format */
   Matrix(crs::CRSMatrix storage)
       : pimpl_(std::make_unique<crs::CRSMatrix>(std::move(storage))) {}
+
+  /** Constructs a sparse matrix in LDU format */
+  Matrix(ldu::LDUMatrix storage)
+      : pimpl_(std::make_unique<ldu::LDUMatrix>(std::move(storage))) {}
 
   template <typename T = MatrixBase>
   const T &getImpl() const {

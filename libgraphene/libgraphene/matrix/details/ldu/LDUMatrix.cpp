@@ -60,24 +60,43 @@ Tensor LDUMatrix::spmv(Tensor &x, TypeRef destType, TypeRef intermediateType,
 
   using namespace codedsl;
   ExecuteThreaded(
-      [destType, intermediateType](Value workerID, Value x, Value rowPtr,
-                                   Value colInd, Value diag, Value offDiag,
-                                   Value res) {
+      [destType, intermediateType](
+          Value workerID, Value x, Value diagCoeffs, Value lowerCoeffs,
+          Value upperCoeffs, Value lowerAddr, Value upperAddr,
+          Value ownerStartAddr, Value neighbourStartPtr, Value neighbourColInd,
+          Value res) {
+        Value numCells = diagCoeffs.size();
         // For each row in the matrix
-        For(workerID, rowPtr.size() - 1, getNumWorkerThreadsPerTile(),
-            [&](Value i) {
-              Variable sum =
-                  diag[i].cast(destType) * x[i].cast(intermediateType);
-              // For each non-diagonal element in the row
-              For(rowPtr[i], rowPtr[i + 1], 1, [&](Value j) {
-                sum += offDiag[j].cast(intermediateType) *
-                       x[colInd[j]].cast(intermediateType);
-              });
-              res[i] = sum.cast(destType);
-            });
+        For(workerID, numCells, getNumWorkerThreadsPerTile(), [&](Value celli) {
+          Variable sum = diagCoeffs[celli].cast(destType) *
+                         x[celli].cast(intermediateType);
+
+          // Iterate over the upper triangular part
+          Variable fStart = ownerStartAddr[celli];
+          Variable fEnd = ownerStartAddr[celli + 1];
+          AssumeHardwareLoop(fEnd - fStart);
+          For(fStart, fEnd, 1, [&](Value face) {
+            sum += upperCoeffs[face].cast(intermediateType) *
+                   x[upperAddr[face]].cast(intermediateType);
+          });
+
+          // Iterate over the lower triangular part
+          Variable sStart = neighbourStartPtr[celli];
+          Variable sEnd = neighbourStartPtr[celli + 1];
+          AssumeHardwareLoop(sEnd - sStart);
+          For(sStart, sEnd, 1, [&](Value s) {
+            Variable face = neighbourColInd[s];
+            sum += lowerCoeffs[s].cast(intermediateType) *
+                   x[lowerAddr[face]].cast(intermediateType);
+          });
+          res[celli] = sum.cast(destType);
+        });
       },
-      In(x), In(addressing->rowPtr), In(addressing->colInd),
-      In(diagonalCoefficients), In(offDiagonalCoefficients), Out(result));
+      In(x), In(diagonalCoefficients), In(lowerCoefficients),
+      In(upperCoefficients ? *upperCoefficients : lowerCoefficients),
+      In(addressing->lowerAddr), In(addressing->upperAddr),
+      In(addressing->ownerStartAddr), In(addressing->neighbourStartPtr),
+      In(addressing->neighbourColInd), Out(result));
 
   return result;
 }
@@ -101,28 +120,49 @@ Tensor LDUMatrix::residual(Tensor &x, const Tensor &b, TypeRef destType,
   DistributedShape resultShape = this->tileLayout.getVectorShape(withHalo);
   Tensor result = Tensor::uninitialized(
       destType, resultShape, TileMapping::linearMappingWithShape(resultShape),
-      "spmv");
+      "residual");
 
   using namespace codedsl;
   ExecuteThreaded(
-      [destType, intermediateType](Value workerID, Value x, Value b,
-                                   Value rowPtr, Value colInd, Value diag,
-                                   Value offDiag, Value res) {
+      [destType, intermediateType](
+          Value workerID, Value x, Value b, Value diagCoeffs, Value lowerCoeffs,
+          Value upperCoeffs, Value lowerAddr, Value upperAddr,
+          Value ownerStartAddr, Value neighbourStartPtr, Value neighbourColInd,
+          Value res) {
+        Value numCells = diagCoeffs.size();
         // For each row in the matrix
-        For(workerID, rowPtr.size() - 1, getNumWorkerThreadsPerTile(),
-            [&](Value i) {
-              Variable sum =
-                  diag[i].cast(intermediateType) * x[i].cast(intermediateType);
-              // For each non-diagonal element in the row
-              For(rowPtr[i], rowPtr[i + 1], 1, [&](Value j) {
-                sum += offDiag[j].cast(intermediateType) *
-                       x[colInd[j]].cast(intermediateType);
-              });
-              res[i] = (b[i].cast(intermediateType) - sum).cast(destType);
-            });
+        For(workerID, numCells, getNumWorkerThreadsPerTile(), [&](Value celli) {
+          Variable sum = diagCoeffs[celli].cast(intermediateType) *
+                         x[celli].cast(intermediateType);
+
+          // Iterate over the upper triangular part
+          Variable fStart = ownerStartAddr[celli];
+          Variable fEnd = ownerStartAddr[celli + 1];
+          AssumeHardwareLoop(fEnd - fStart);
+          For(fStart, fEnd, 1, [&](Value face) {
+            sum += upperCoeffs[face].cast(intermediateType) *
+                   x[upperAddr[face]].cast(intermediateType);
+          });
+
+          // Iterate over the lower triangular part
+          Variable sStart = neighbourStartPtr[celli];
+          Variable sEnd = neighbourStartPtr[celli + 1];
+          AssumeHardwareLoop(sEnd - sStart);
+          For(sStart, sEnd, 1, [&](Value s) {
+            Variable face = neighbourColInd[s];
+            sum += lowerCoeffs[s].cast(intermediateType) *
+                   x[lowerAddr[face]].cast(intermediateType);
+          });
+
+          // Compute residual: b - Ax
+          res[celli] = (b[celli].cast(intermediateType) - sum).cast(destType);
+        });
       },
-      In(x), In(b), In(addressing->rowPtr), In(addressing->colInd),
-      In(diagonalCoefficients), In(offDiagonalCoefficients), Out(result));
+      In(x), In(b), In(diagonalCoefficients), In(lowerCoefficients),
+      In(upperCoefficients ? *upperCoefficients : lowerCoefficients),
+      In(addressing->lowerAddr), In(addressing->upperAddr),
+      In(addressing->ownerStartAddr), In(addressing->neighbourStartPtr),
+      In(addressing->neighbourColInd), Out(result));
 
   return result;
 }

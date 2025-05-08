@@ -20,6 +20,7 @@
 
 #include "libgraphene/common/Concepts.hpp"
 #include "libgraphene/common/Type.hpp"
+#include "libgraphene/dsl/tensor/Tensor.hpp"
 #include "libgraphene/matrix/details/MatrixBase.hpp"
 #include "libgraphene/matrix/details/ldu/LDUAddressing.hpp"
 #include "libgraphene/matrix/host/DistributedTileLayout.hpp"
@@ -27,29 +28,33 @@
 namespace graphene::matrix::ldu {
 
 /**
- * @brief A class representing a matrix in LDU (lower-diagonal-upper) format.
+ * @brief A class representing a matrix in LDU format.
  */
 struct LDUMatrix : public MatrixBase {
-  std::shared_ptr<LDUAddressing>
-      addressing;                  ///< Addressing scheme for the LDU matrix.
-  Tensor offDiagonalCoefficients;  ///< Off-diagonal coefficients of the matrix.
-  Tensor diagonalCoefficients;     ///< Diagonal coefficients of the matrix.
+  std::shared_ptr<LDUAddressing> addressing;
+  Tensor diagonalCoefficients;
+  Tensor lowerCoefficients;
+  std::optional<Tensor> upperCoefficients;
 
   /**
    * @brief Construct a new LDU matrix.
    *
    * @param hostMatrix The host matrix this LDU matrix is based on.
    * @param addressing The addressing scheme for the LDU matrix.
-   * @param offDiagonalCoefficients The off-diagonal coefficients of the matrix.
    * @param diagonalCoefficients The diagonal coefficients of the matrix.
+   * @param lowerCoefficients The coefficients of the lower triangular part.
+   * @param upperCoefficients The coefficients of the upper triangular part, if
+   * they are different from the lower coefficients (asymmetric matrix).
    */
   LDUMatrix(const host::DistributedTileLayout &tileLayout,
             std::shared_ptr<LDUAddressing> addressing,
-            Tensor offDiagonalCoefficients, Tensor diagonalCoefficients)
+            Tensor diagonalCoefficients, Tensor lowerCoefficients,
+            std::optional<Tensor> upperCoefficients = std::nullopt)
       : MatrixBase(tileLayout),
         addressing(std::move(addressing)),
-        offDiagonalCoefficients(std::move(offDiagonalCoefficients)),
-        diagonalCoefficients(std::move(diagonalCoefficients)) {}
+        diagonalCoefficients(std::move(diagonalCoefficients)),
+        lowerCoefficients(std::move(lowerCoefficients)),
+        upperCoefficients(std::move(upperCoefficients)) {}
 
   Tensor spmv(Tensor &x, TypeRef destType = nullptr,
               TypeRef intermediateType = nullptr,
