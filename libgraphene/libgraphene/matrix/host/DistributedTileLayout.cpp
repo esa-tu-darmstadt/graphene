@@ -129,27 +129,30 @@ DistributedShape DistributedTileLayout::getVectorShape(bool withHalo,
 template <DataType Type>
 HostTensor DistributedTileLayout::decomposeVector(
     const std::vector<Type> &vector, bool includeHaloCells, TypeRef destType,
-    std::string name) const {
-  auto shape = getVectorShape(includeHaloCells);
+    std::string name, size_t width) const {
+  assert(width == 0 || width == 1 && "Only 1D vectors are supported yet");
+  auto shape = getVectorShape(includeHaloCells, width);
 
-  // Decompose the vector
-  std::vector<Type> decomposedVector;
-  decomposedVector.reserve(shape[0]);
-  for (size_t i = 0; i < numTiles(); ++i) {
-    const TilePartition &tile = getTilePartition(i);
-    for (size_t localRow = 0; localRow < tile.localToGlobalRow.size();
-         ++localRow) {
-      size_t globalRow = tile.localToGlobalRow[localRow];
-      if (!includeHaloCells && tile.isHalo(localRow)) continue;
-      // CHANGEME: Set halo cells to zero to check if halo exchange is working
-      decomposedVector.push_back(vector[globalRow]);
+  // Decompose the vector and cast it to the destination type
+  return typeSwitch(destType, [&]<DataType DestType>() {
+    std::vector<DestType> decomposedVector;
+    decomposedVector.reserve(shape[0]);
+    for (size_t i = 0; i < numTiles(); ++i) {
+      const TilePartition &tile = getTilePartition(i);
+      for (size_t localRow = 0; localRow < tile.localToGlobalRow.size();
+           ++localRow) {
+        size_t globalRow = tile.localToGlobalRow[localRow];
+        if (!includeHaloCells && tile.isHalo(localRow)) continue;
+        // CHANGEME: Set halo cells to zero to check if halo exchange is working
+        decomposedVector.push_back((DestType)vector[globalRow]);
+      }
     }
-  }
 
-  TileMapping mapping = TileMapping::linearMappingWithShape(shape);
-  return HostTensor::createPersistent(std::move(decomposedVector),
-                                      std::move(shape), std::move(mapping),
-                                      std::move(name));
+    TileMapping mapping = TileMapping::linearMappingWithShape(shape);
+    return HostTensor::createPersistent(std::move(decomposedVector),
+                                        std::move(shape), std::move(mapping),
+                                        std::move(name));
+  });
 }
 
 HostTensor DistributedTileLayout::loadVectorFromFile(TypeRef type,
@@ -178,10 +181,10 @@ HostTensor DistributedTileLayout::loadVectorFromFile(TypeRef type,
 // Template instantiations for common types
 template HostTensor DistributedTileLayout::decomposeVector<float>(
     const std::vector<float> &vector, bool includeHaloCells, TypeRef destType,
-    std::string name) const;
+    std::string name, size_t width) const;
 
 template HostTensor DistributedTileLayout::decomposeVector<double>(
     const std::vector<double> &vector, bool includeHaloCells, TypeRef destType,
-    std::string name) const;
+    std::string name, size_t width) const;
 
 }  // namespace graphene::matrix::host

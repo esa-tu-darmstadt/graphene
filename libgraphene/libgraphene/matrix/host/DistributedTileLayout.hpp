@@ -170,7 +170,8 @@ class DistributedTileLayout {
   HostTensor decomposeVector(const std::vector<Type> &vector,
                              bool includeHaloCells,
                              TypeRef destType = getType<Type>(),
-                             std::string name = "vector") const;
+                             std::string name = "vector",
+                             size_t width = 0) const;
 
   /// Load a vector from a file and decompose it according to this layout
   HostTensor loadVectorFromFile(TypeRef type, std::string fileName,
