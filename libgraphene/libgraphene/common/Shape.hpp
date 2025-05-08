@@ -347,7 +347,7 @@ class DistributedShape {
   //   return newShape;
   // }
 
-  /// Broadcast two shapes according to NumPy broadcasting rules if possible .
+  /// Broadcast two shapes according to NumPy broadcasting rules if possible.
   /// If the shapes are not compatible for broadcasting, return std::nullopt.
   /// The rules for broadcasting are as follows:
   /// Comparing the dimensions from the last to the first:
@@ -362,59 +362,46 @@ class DistributedShape {
         shape1.rank() > shape2.rank() ? shape2 : shape1;
     DistributedShape broadcastedShape = longerShape;
 
-    auto firstDimDistributionCompatible = [](DistributedShape &shape1,
-                                             DistributedShape &shape2) -> bool {
-      if (shape1[0] == 1) return true;
-      if (shape2[0] == 1) return true;
-      if (shape1.firstDimDistribution() == shape2.firstDimDistribution())
-        return true;
-      return false;
-    };
-
-    // If the shapes have a different rank, then the shorter shape is extended
-    // with 1s at the beginning. Thus, its first dimension is set to one, which
-    // is always compatible with the first dimension of the longer shape.
-
-    // If the shapes have the same rank but different first dimension
-    // distributions, one of the first dimensions must be 1
-    if (shape1.rank() == shape2.rank() &&
-        shape1.firstDimDistribution() != shape2.firstDimDistribution()) {
-      if (shape1[0] == 1)
-        broadcastedShape.firstDimDistribution() = shape2.firstDimDistribution();
-      else if (shape2[0] == 1)
-        broadcastedShape.firstDimDistribution() = shape1.firstDimDistribution();
-      else {
-        spdlog::trace(
-            "Shapes have the same rank but the first dimension does not "
-            "match: {} vs {}",
-            shape1[0], shape2[0]);
-        return std::nullopt;
-      }
-    }
-
-    // At this point we know that all dimension but the last n-1 are set and
-    // compatible, with n being the rank of the shorter shape. We can now
-    // compare the last n-1 dimensions.
-
-    for (size_t i = 1; i < shorterShape.rank(); ++i) {
+    // Check compatibility of dimensions by working right-to-left (last dimension to first)
+    size_t rankDiff = longerShape.rank() - shorterShape.rank();
+    
+    // First, check the common dimensions (from the end)
+    for (size_t i = 0; i < shorterShape.rank(); ++i) {
       // Compare the right-aligned dimensions
-      size_t longerDim = i + longerShape.rank() - shorterShape.rank();
-      size_t shorterDim = i;
-
-      if (longerShape[longerDim] == 1) {
-        broadcastedShape.globalShape()[longerDim] = shorterShape[shorterDim];
-      } else if (shorterShape[shorterDim] == 1) {
-        broadcastedShape.globalShape()[longerDim] = longerShape[longerDim];
-      } else if (longerShape[longerDim] == shorterShape[shorterDim]) {
-        broadcastedShape.globalShape()[longerDim] = longerShape[longerDim];
+      size_t longerIdx = longerShape.rank() - 1 - i;
+      size_t shorterIdx = shorterShape.rank() - 1 - i;
+      
+      size_t longerDim = longerShape[longerIdx];
+      size_t shorterDim = shorterShape[shorterIdx];
+      
+      if (longerDim == 1) {
+        broadcastedShape.globalShape()[longerIdx] = shorterDim;
+      } else if (shorterDim == 1) {
+        // Already has the right value from longerShape
+      } else if (longerDim == shorterDim) {
+        // Already has the right value from longerShape
       } else {
         spdlog::trace(
             "Shapes are not compatible for broadcasting because they have "
             "different incompatible dimensions: {} vs {}",
-            longerShape[longerDim], shorterShape[shorterDim]);
+            longerDim, shorterDim);
         return std::nullopt;
       }
     }
+    
+    // For the first dimension, check if the distributions are compatible
+    if (shape1.firstDimDistribution() != shape2.firstDimDistribution()) {
+      if (shape1[0] == 1) {
+        broadcastedShape.firstDimDistribution() = shape2.firstDimDistribution();
+      } else if (shape2[0] == 1) {
+        broadcastedShape.firstDimDistribution() = shape1.firstDimDistribution();
+      } else {
+        spdlog::trace(
+            "Shapes have incompatible first dimension distributions");
+        return std::nullopt;
+      }
+    }
+    
     return broadcastedShape;
   }
 };

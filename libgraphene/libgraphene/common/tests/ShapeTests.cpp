@@ -262,3 +262,19 @@ TEST_F(DistributedShapeTest, BroadcastScalarAndNonScalar) {
   EXPECT_EQ(result->globalShape().dim(0), 3u);
   EXPECT_EQ(result->globalShape().dim(1), 2u);
 }
+
+TEST_F(DistributedShapeTest, BroadcastIncompatibleDifferentRanks) {
+  // Shape A has rank=1 with dim(0)=10
+  // Shape B has rank=2 with dims(0)=1, dims(1)=3
+  // After padding A to rank 2, we get {1, 10} which is incompatible with {1, 3}
+  TensorShape tA({10});
+  FirstDimDistribution dA({{0, 10}});
+  auto dsA = DistributedShape::onTiles(tA, dA);
+
+  TensorShape tB({1, 3});
+  FirstDimDistribution dB({{0, 1}});
+  auto dsB = DistributedShape::onTiles(tB, dB);
+
+  auto result = DistributedShape::broadcast(dsA, dsB);
+  EXPECT_FALSE(result.has_value());
+}
