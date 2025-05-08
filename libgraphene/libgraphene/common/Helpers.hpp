@@ -101,16 +101,26 @@ ret_t callFunctionWithUnpackedArgs(F& code, args_t args) {
 
 template <typename T, typename U>
 concept invocable_with_args_of =
-    std::invocable<T, U> ||                           // callable with one U
-    std::invocable<T, U, U> ||                        // callable with two U's
-    std::invocable<T, U, U, U> ||                     // callable with three U's
-    std::invocable<T, U, U, U, U> ||                  // callable with four U's
-    std::invocable<T, U, U, U, U, U> ||               // callable with five U's
-    std::invocable<T, U, U, U, U, U, U> ||            // callable with six U's
-    std::invocable<T, U, U, U, U, U, U, U> ||         // callable with seven U's
-    std::invocable<T, U, U, U, U, U, U, U, U> ||      // callable with eight U's
-    std::invocable<T, U, U, U, U, U, U, U, U, U> ||   // callable with nine U's
-    std::invocable<T, U, U, U, U, U, U, U, U, U, U>;  // callable with ten U's
+    std::invocable<T, U> ||                          // callable with one U
+    std::invocable<T, U, U> ||                       // callable with two U's
+    std::invocable<T, U, U, U> ||                    // callable with three U's
+    std::invocable<T, U, U, U, U> ||                 // callable with four U's
+    std::invocable<T, U, U, U, U, U> ||              // callable with five U's
+    std::invocable<T, U, U, U, U, U, U> ||           // callable with six U's
+    std::invocable<T, U, U, U, U, U, U, U> ||        // callable with seven U's
+    std::invocable<T, U, U, U, U, U, U, U, U> ||     // callable with eight U's
+    std::invocable<T, U, U, U, U, U, U, U, U, U> ||  // callable with nine U's
+    std::invocable<T, U, U, U, U, U, U, U, U, U, U> ||  // callable with ten U's
+    std::invocable<T, U, U, U, U, U, U, U, U, U, U,
+                   U> ||  // callable with eleven U's
+    std::invocable<T, U, U, U, U, U, U, U, U, U, U, U,
+                   U> ||  // callable with twelve U's
+    std::invocable<T, U, U, U, U, U, U, U, U, U, U, U, U,
+                   U> ||  // callable with thirteen U's
+    std::invocable<T, U, U, U, U, U, U, U, U, U, U, U, U, U,
+                   U> ||  // callable with fourteen U's
+    std::invocable<T, U, U, U, U, U, U, U, U, U, U, U, U, U, U,
+                   U>;  // callable with fifteen U's
 
 /**
  * @brief Checks if class type Specialisation (the implicit concept
