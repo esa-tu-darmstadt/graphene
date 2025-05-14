@@ -25,6 +25,18 @@
 
 namespace graphene {
 
+// Default policy for determining whether a value is "absent"
+template <typename T>
+struct DefaultAbsentPolicy {
+  static bool isAbsent(const T& value) {
+    return value == T{};
+  }
+  
+  static T getAbsentValue() {
+    return T{};
+  }
+};
+
 /**
  * @brief A specialized associative container implementing map-like semantics
  * using vector storage
@@ -37,15 +49,15 @@ namespace graphene {
  *   2. Direct index-based access is the primary operation
  *   3. Memory overhead of sparse standard maps is undesirable
  *
- * Zero values (T{}) represent absent elements, enabling sparse storage while
- * maintaining vector-based performance characteristics.
+ * Values identified as "absent" by AbsentPolicy represent unset elements.
  *
  * @tparam T The value type stored in the container
+ * @tparam AbsentPolicy Policy that determines what constitutes an "absent" value
  *
  * Implementation Notes:
  * - Vector resizing occurs automatically when accessing indices beyond current
  * capacity
- * - Iterator implementation skips zero values, providing map-like iteration
+ * - Iterator implementation skips absent values, providing map-like iteration
  * semantics
  * - Memory efficiency depends on key density and value type size
  *
@@ -54,7 +66,7 @@ namespace graphene {
  * - Insertion: O(1) amortized for push_back, O(n) for mid-container resize
  * - Iteration: O(n) where n is the vector size
  */
-template <typename T>
+template <typename T, typename AbsentPolicy = DefaultAbsentPolicy<T>>
 class VectorMap {
  public:
   using key_type = std::size_t;
@@ -86,7 +98,7 @@ class VectorMap {
     using mapped_ref = std::conditional_t<IsConst, const T, T>;
 
     //------------------------------------------------
-    // Because we want to skip zero-values, we store:
+    // Because we want to skip absent values, we store:
     //  - an actual iterator (`current_`)
     //  - a sentinel (`end_`)
     //  - the numeric index (`index_`)
@@ -98,8 +110,8 @@ class VectorMap {
     //------------------------------------------------
     // We'll do the same "proxy reference" trick:
     //   a pair<const key_type, (const) T&>
-    // for the "non-const" iterator, that’s `T&`.
-    // for the "const" iterator, that’s `const T&`.
+    // for the "non-const" iterator, that's `T&`.
+    // for the "const" iterator, that's `const T&`.
     //
     // We'll store it inside a union buffer, so
     // operator* can return a stable reference.
@@ -123,9 +135,9 @@ class VectorMap {
           const_cast<void*>(static_cast<const void*>(&cache_)));
     }
 
-    // Skip all zeroes
-    void skipZeros() {
-      while (current_ != end_ && *current_ == T{}) {
+    // Skip all absent values
+    void skipAbsent() {
+      while (current_ != end_ && AbsentPolicy::isAbsent(*current_)) {
         ++current_;
         ++index_;
       }
@@ -147,7 +159,7 @@ class VectorMap {
     // Real ctor
     iterator_base(base_iter curr, base_iter end, key_type idx)
         : current_(curr), end_(end), index_(idx) {
-      skipZeros();
+      skipAbsent();
     }
 
     // operator* -> re-init the in-place ProxyRef, return a reference
@@ -165,7 +177,7 @@ class VectorMap {
       if (current_ != end_) {
         ++current_;
         ++index_;
-        skipZeros();
+        skipAbsent();
       }
       return *this;
     }
@@ -219,21 +231,26 @@ class VectorMap {
   // Access methods
   mapped_type& at(size_t index) {
     if (index >= data_.size()) {
-      data_.resize(index + 1);
+      data_.resize(index + 1, AbsentPolicy::getAbsentValue());
     }
     return data_[index];
   }
 
   const mapped_type& at(size_t index) const {
     if (index >= data_.size()) {
-      static const T zero{};
-      return zero;
+      static const T absentValue = AbsentPolicy::getAbsentValue();
+      return absentValue;
     }
     return data_[index];
   }
 
   mapped_type& operator[](std::size_t i) { return at(i); }
   const mapped_type& operator[](std::size_t i) const { return at(i); }
+
+  // Special map method that makes intent clear
+  void map(std::size_t key, const T& value) {
+    at(key) = value;
+  }
 
   // Capacity
   size_t capacity() const { return data_.size(); }
@@ -245,15 +262,15 @@ class VectorMap {
   // Erase a specific key
   void erase(size_t index) {
     if (index < data_.size()) {
-      data_[index] = T{};
+      data_[index] = AbsentPolicy::getAbsentValue();
     }
   }
 
-  // Count non-zero elements
+  // Count non-absent elements
   size_t count() const {
     size_t count = 0;
     for (const auto& item : data_) {
-      if (item != T{}) {
+      if (!AbsentPolicy::isAbsent(item)) {
         ++count;
       }
     }
@@ -264,26 +281,26 @@ class VectorMap {
   // resizing
   void reserve(size_t maxKey) {
     if (maxKey >= data_.size()) {
-      data_.resize(maxKey + 1);
+      data_.resize(maxKey + 1, AbsentPolicy::getAbsentValue());
     }
   }
 
   // Comparison operators
   bool operator==(const VectorMap& other) const {
     // Make sure that the common elements are equal, and that the rest are
-    // zero
+    // absent
     size_t min_size = std::min(this->capacity(), other.capacity());
     if (!std::equal(this->data_.begin(), this->data_.begin() + min_size,
-                    other.data_.begin())) {
+                  other.data_.begin())) {
       return false;
     }
 
-    // Check that the rest of the elements are zero
+    // Check that the rest of the elements are absent
     if (this->capacity() != other.capacity()) {
       auto& largerData =
           this->capacity() > other.capacity() ? this->data_ : other.data_;
       for (size_t i = min_size; i < largerData.size(); ++i) {
-        if (largerData[i] != T{}) {
+        if (!AbsentPolicy::isAbsent(largerData[i])) {
           return false;
         }
       }
@@ -294,20 +311,20 @@ class VectorMap {
 
   size_t maxKey() const {
     for (ssize_t i = data_.size() - 1; i >= 0; --i) {
-      if (data_[i] != T{}) {
+      if (!AbsentPolicy::isAbsent(data_[i])) {
         return i;
       }
     }
-    throw std::runtime_error("No non-zero elements");
+    throw std::runtime_error("No non-absent elements");
   }
 
   size_t minKey() const {
     for (size_t i = 0; i < data_.size(); ++i) {
-      if (data_[i] != T{}) {
+      if (!AbsentPolicy::isAbsent(data_[i])) {
         return i;
       }
     }
-    throw std::runtime_error("No non-zero elements");
+    throw std::runtime_error("No non-absent elements");
   }
 };
 

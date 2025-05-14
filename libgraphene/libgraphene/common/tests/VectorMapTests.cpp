@@ -27,16 +27,12 @@ using namespace graphene;
 class VectorMapTest : public ::testing::Test {
  protected:
   VectorMap<int> int_map;
-  VectorMap<std::string> string_map;
 
   void SetUp() override {
     // Initialize test fixtures
     int_map[1] = 10;
     int_map[5] = 50;
     int_map[10] = 100;
-
-    string_map[2] = "two";
-    string_map[4] = "four";
   }
 };
 
