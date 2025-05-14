@@ -46,7 +46,7 @@ struct Interval {
   }
 };
 
-/// Represents a mapping of (tensor) intervals to tiles.
+/// Represents a mapping of tiles to (tensor) intervals.
 class TileMapping {
   VectorMap<std::vector<Interval>> mapping_;
 
