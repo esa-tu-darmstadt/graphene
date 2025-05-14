@@ -68,7 +68,12 @@ poplar::Tensor sliceTensorToTile(poplar::Tensor tensor, size_t tile,
     throw std::runtime_error(
         "This function currently only supports tensors with at most a single "
         "interval per tile");
-  if (intervalsOnTile.size() == 0) return {};
+  if (intervalsOnTile.size() == 0) {
+    // No elements on this tile, return an empty tensor
+    // Is this a legal hack to return an empty tensor? We want the tensor to be
+    // valid, but empty.
+    return tensor.slice(0, 0);
+  }
 
   Interval interval = *intervalsOnTile.begin();
   size_t stride = shape.stride(0);
