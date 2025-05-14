@@ -21,7 +21,7 @@
 #include <fmt/format.h>
 
 #include <limits>
-#include <nlohmann/json_fwd.hpp>
+#include <boost/property_tree/ptree.hpp>
 
 #include "libgraphene/matrix/solver/Configuration.hpp"
 
@@ -34,7 +34,7 @@ struct Configuration : solver::Configuration,
   std::shared_ptr<solver::Configuration> innerSolver;
 
   Configuration() = default;
-  Configuration(nlohmann::json const& config);
+  Configuration(boost::property_tree::ptree const& config);
 
   std::string solverName() const override {
     return fmt::format("Restarter of {}", innerSolver->solverName());

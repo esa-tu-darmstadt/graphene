@@ -20,6 +20,7 @@
 
 #include <memory>
 #include <nlohmann/json_fwd.hpp>
+#include <boost/property_tree/ptree.hpp>
 
 namespace graphene::matrix::solver {
 
@@ -28,11 +29,14 @@ enum class MultiColorMode { Off, On, Auto };
 struct Configuration {
  protected:
   template <typename T>
-  void setFieldFromJSON(nlohmann::json const& config, std::string const& field,
+  void setFieldFromPTree(boost::property_tree::ptree const& config, std::string const& field,
                         T& value);
 
  public:
   virtual std::string solverName() const = 0;
+  static std::shared_ptr<Configuration> fromPTree(boost::property_tree::ptree const& config);
+  
+  // Legacy JSON support
   static std::shared_ptr<Configuration> fromJSON(nlohmann::json const& config);
 };
 

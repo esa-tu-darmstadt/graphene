@@ -18,27 +18,33 @@
 
 #include "libgraphene/matrix/solver/iterative-refinement/Configuration.hpp"
 
-#include <nlohmann/json.hpp>
+#include <boost/property_tree/ptree.hpp>
 
 #include "libgraphene/matrix/Norm.hpp"
 
 namespace graphene::matrix::solver::iterativerefinement {
-Configuration::Configuration(nlohmann::json const& config) {
-  setFieldFromJSON<float>(config, "absTolerance", absTolerance);
-  setFieldFromJSON<float>(config, "relTolerance", relTolerance);
-  setFieldFromJSON<float>(config, "relResidual", relResidual);
-  setFieldFromJSON<int>(config, "maxIterations", maxIterations);
-  setFieldFromJSON<int>(config, "minIterations", minIterations);
-  setFieldFromJSON<bool>(config, "printPerformanceAfterSolve",
-                         printPerformanceAfterSolve);
-  setFieldFromJSON<bool>(config, "printPerformanceEachIteration",
-                         printPerformanceEachIteration);
-  setFieldFromJSON<VectorNorm>(config, "norm", norm);
+Configuration::Configuration(boost::property_tree::ptree const& config) {
+  setFieldFromPTree<float>(config, "absTolerance", absTolerance);
+  setFieldFromPTree<float>(config, "relTolerance", relTolerance);
+  setFieldFromPTree<float>(config, "relResidual", relResidual);
+  setFieldFromPTree<int>(config, "maxIterations", maxIterations);
+  setFieldFromPTree<int>(config, "minIterations", minIterations);
+  setFieldFromPTree<bool>(config, "printPerformanceAfterSolve",
+                        printPerformanceAfterSolve);
+  setFieldFromPTree<bool>(config, "printPerformanceEachIteration",
+                        printPerformanceEachIteration);
+  setFieldFromPTree<VectorNorm>(config, "norm", norm);
 
-  setFieldFromJSON<TypeRef>(config, "extendedPrecisionType",
-                            extendedPrecisionType);
+  setFieldFromPTree<TypeRef>(config, "extendedPrecisionType",
+                           extendedPrecisionType);
 
-  innerSolver = solver::Configuration::fromJSON(config["innerSolver"]);
+  // Handle nested solver configuration
+  auto innerSolverChild = config.get_child_optional("innerSolver");
+  if (innerSolverChild) {
+    innerSolver = solver::Configuration::fromPTree(innerSolverChild.value());
+  } else {
+    throw std::runtime_error("IterativeRefinement requires an innerSolver configuration");
+  }
 }
 
 }  // namespace graphene::matrix::solver::iterativerefinement

@@ -19,7 +19,7 @@
 #pragma once
 
 #include <limits>
-#include <nlohmann/json_fwd.hpp>
+#include <boost/property_tree/ptree.hpp>
 
 #include "libgraphene/matrix/Norm.hpp"
 #include "libgraphene/matrix/solver/Configuration.hpp"
@@ -33,7 +33,7 @@ struct Configuration : solver::Configuration,
   bool diagonalBased = false;
 
   Configuration() = default;
-  Configuration(nlohmann::json const& config);
+  Configuration(boost::property_tree::ptree const& config);
 
   std::string solverName() const override {
     return diagonalBased ? "DILU" : "ILU(0)";

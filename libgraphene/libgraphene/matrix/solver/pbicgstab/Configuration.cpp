@@ -18,27 +18,29 @@
 
 #include "libgraphene/matrix/solver/pbicgstab/Configuration.hpp"
 
-#include <nlohmann/json.hpp>
+#include <boost/property_tree/ptree.hpp>
 
 #include "libgraphene/matrix/Norm.hpp"
 
 namespace graphene::matrix::solver::pbicgstab {
-Configuration::Configuration(nlohmann::json const& config) {
-  setFieldFromJSON<float>(config, "absTolerance", absTolerance);
-  setFieldFromJSON<float>(config, "relTolerance", relTolerance);
-  setFieldFromJSON<float>(config, "relResidual", relResidual);
-  setFieldFromJSON<int>(config, "maxIterations", maxIterations);
-  setFieldFromJSON<int>(config, "minIterations", minIterations);
-  setFieldFromJSON<bool>(config, "printPerformanceAfterSolve",
-                         printPerformanceAfterSolve);
-  setFieldFromJSON<bool>(config, "printPerformanceEachIteration",
-                         printPerformanceEachIteration);
-  setFieldFromJSON<VectorNorm>(config, "norm", norm);
-  setFieldFromJSON<bool>(config, "verbose", verbose);
-  setFieldFromJSON<TypeRef>(config, "workingType", workingType);
+Configuration::Configuration(boost::property_tree::ptree const& config) {
+  setFieldFromPTree<float>(config, "absTolerance", absTolerance);
+  setFieldFromPTree<float>(config, "relTolerance", relTolerance);
+  setFieldFromPTree<float>(config, "relResidual", relResidual);
+  setFieldFromPTree<int>(config, "maxIterations", maxIterations);
+  setFieldFromPTree<int>(config, "minIterations", minIterations);
+  setFieldFromPTree<bool>(config, "printPerformanceAfterSolve",
+                        printPerformanceAfterSolve);
+  setFieldFromPTree<bool>(config, "printPerformanceEachIteration",
+                        printPerformanceEachIteration);
+  setFieldFromPTree<VectorNorm>(config, "norm", norm);
+  setFieldFromPTree<bool>(config, "verbose", verbose);
+  setFieldFromPTree<TypeRef>(config, "workingType", workingType);
 
-  if (config.contains("preconditioner"))
-    preconditioner = solver::Configuration::fromJSON(config["preconditioner"]);
+  auto precondChild = config.get_child_optional("preconditioner");
+  if (precondChild) {
+    preconditioner = solver::Configuration::fromPTree(precondChild.value());
+  }
 }
 
 }  // namespace graphene::matrix::solver::pbicgstab

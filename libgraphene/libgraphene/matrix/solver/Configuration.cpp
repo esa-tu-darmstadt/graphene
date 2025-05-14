@@ -20,7 +20,10 @@
 
 #include <fmt/format.h>
 
+#include <boost/property_tree/json_parser.hpp>
+#include <boost/property_tree/ptree.hpp>
 #include <nlohmann/json.hpp>
+#include <sstream>
 
 #include "libgraphene/matrix/Norm.hpp"
 #include "libgraphene/matrix/solver/gauss-seidel/Configuration.hpp"
@@ -37,61 +40,74 @@ auto format_as(const json& j) { return j.dump(); }
 
 namespace graphene::matrix::solver {
 template <>
-void Configuration::setFieldFromJSON<VectorNorm>(nlohmann::json const& config,
-                                                 std::string const& field,
-                                                 VectorNorm& value) {
-  if (config.find(field) != config.end()) {
-    value = parseVectorNorm(config[field]);
+void Configuration::setFieldFromPTree<VectorNorm>(
+    boost::property_tree::ptree const& config, std::string const& field,
+    VectorNorm& value) {
+  auto maybeValue = config.get_optional<std::string>(field);
+  if (maybeValue) {
+    value = parseVectorNorm(maybeValue.value());
   }
 }
 
 template <>
-void Configuration::setFieldFromJSON<MultiColorMode>(
-    nlohmann::json const& config, std::string const& field,
+void Configuration::setFieldFromPTree<MultiColorMode>(
+    boost::property_tree::ptree const& config, std::string const& field,
     MultiColorMode& value) {
-  if (config.find(field) != config.end()) {
-    if (config[field].is_boolean()) {
-      value =
-          config[field].get<bool>() ? MultiColorMode::On : MultiColorMode::Off;
-    } else if (config[field].is_string() && config[field] == "auto") {
+  auto maybeValue = config.get_optional<std::string>(field);
+  if (maybeValue) {
+    std::string valueStr = maybeValue.value();
+    if (valueStr == "true" || valueStr == "on") {
+      value = MultiColorMode::On;
+    } else if (valueStr == "false" || valueStr == "off") {
+      value = MultiColorMode::Off;
+    } else if (valueStr == "auto") {
       value = MultiColorMode::Auto;
     } else {
       throw std::runtime_error(fmt::format(
           "Invalid value for MultiColorMode field {}: {}. Allowed values are "
-          "true, false or \"auto\"",
-          field, config[field]));
+          "true, false, on, off or \"auto\"",
+          field, valueStr));
     }
+  }
+
+  // Also try to read as boolean for backward compatibility
+  auto maybeBool = config.get_optional<bool>(field);
+  if (maybeBool) {
+    value = maybeBool.value() ? MultiColorMode::On : MultiColorMode::Off;
   }
 }
 
 template <>
-void Configuration::setFieldFromJSON<TypeRef>(nlohmann::json const& config,
-                                              std::string const& field,
-                                              TypeRef& value) {
-  if (config.find(field) != config.end()) {
-    value = parseType(config[field]);
+void Configuration::setFieldFromPTree<TypeRef>(
+    boost::property_tree::ptree const& config, std::string const& field,
+    TypeRef& value) {
+  auto maybeValue = config.get_optional<std::string>(field);
+  if (maybeValue) {
+    value = parseType(maybeValue.value());
     if (!value) {
       throw std::runtime_error(
-          fmt::format("Unknown type in JSON config: {}", config[field]));
+          fmt::format("Unknown type in config: {}", maybeValue.value()));
     }
   }
 }
 
 template <typename T>
-void Configuration::setFieldFromJSON(nlohmann::json const& config,
-                                     std::string const& field, T& value) {
-  if (config.find(field) != config.end()) {
-    value = config[field];
+void Configuration::setFieldFromPTree(boost::property_tree::ptree const& config,
+                                      std::string const& field, T& value) {
+  auto maybeValue = config.get_optional<T>(field);
+  if (maybeValue) {
+    value = maybeValue.value();
   }
 }
 
-std::shared_ptr<Configuration> Configuration::fromJSON(
-    nlohmann::json const& config) {
-  if (config.find("type") == config.end()) {
-    throw std::runtime_error("No solver specified in configuration");
+std::shared_ptr<Configuration> Configuration::fromPTree(
+    boost::property_tree::ptree const& config) {
+  auto maybeType = config.get_optional<std::string>("type");
+  if (!maybeType) {
+    throw std::runtime_error("No solver type specified in configuration");
   }
 
-  std::string solver = config["type"];
+  std::string solver = maybeType.value();
   if (solver == "IterativeRefinement") {
     return std::make_shared<iterativerefinement::Configuration>(config);
   } else if (solver == "GaussSeidel") {
@@ -107,12 +123,25 @@ std::shared_ptr<Configuration> Configuration::fromJSON(
   }
 }
 
+std::shared_ptr<Configuration> Configuration::fromJSON(
+    nlohmann::json const& config) {
+  // Convert JSON to property tree
+  std::stringstream ss;
+  ss << config;
+
+  boost::property_tree::ptree ptree;
+  boost::property_tree::read_json(ss, ptree);
+
+  return fromPTree(ptree);
+}
+
 // Template instantiation
-template void Configuration::setFieldFromJSON<float>(nlohmann::json const&,
-                                                     std::string const&,
-                                                     float&);
-template void Configuration::setFieldFromJSON<int>(nlohmann::json const&,
-                                                   std::string const&, int&);
-template void Configuration::setFieldFromJSON<bool>(nlohmann::json const&,
-                                                    std::string const&, bool&);
+template void Configuration::setFieldFromPTree<float>(
+    boost::property_tree::ptree const&, std::string const&, float&);
+template void Configuration::setFieldFromPTree<int>(
+    boost::property_tree::ptree const&, std::string const&, int&);
+template void Configuration::setFieldFromPTree<bool>(
+    boost::property_tree::ptree const&, std::string const&, bool&);
+template void Configuration::setFieldFromPTree<std::string>(
+    boost::property_tree::ptree const&, std::string const&, std::string&);
 }  // namespace graphene::matrix::solver

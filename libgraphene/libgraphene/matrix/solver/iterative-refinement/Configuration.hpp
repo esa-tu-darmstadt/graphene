@@ -18,8 +18,8 @@
 
 #pragma once
 
+#include <boost/property_tree/ptree.hpp>
 #include <limits>
-#include <nlohmann/json_fwd.hpp>
 
 #include "libgraphene/common/Type.hpp"
 #include "libgraphene/matrix/Norm.hpp"
@@ -43,7 +43,7 @@ struct Configuration : solver::Configuration,
   TypeRef extendedPrecisionType = nullptr;
 
   Configuration() = default;
-  Configuration(nlohmann::json const& config);
+  Configuration(boost::property_tree::ptree const& config);
 
   std::string solverName() const override { return "IterativeRefinement"; }
 };
