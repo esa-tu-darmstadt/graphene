@@ -37,6 +37,8 @@
 
 namespace graphene {
 
+using FirstDimDistribution = VectorMap<size_t>;
+
 /// Represents the shape of a tensor. Shapes are always non-empty. Scalar shapes
 /// are represented by a shape with a single dimension of size 1.
 class TensorShape : private std::vector<size_t> {
@@ -52,8 +54,24 @@ class TensorShape : private std::vector<size_t> {
     this->push_back(1);
   }
 
+  explicit TensorShape(const FirstDimDistribution &firstDimDistribution,
+                       const std::vector<size_t> &otherDims) {
+    // Accumulate the first dimension
+    size_t firstDimSize = std::accumulate(
+        firstDimDistribution.begin(), firstDimDistribution.end(), 0u,
+        [](size_t sum, auto &&pair) { return sum + pair.value; });
+    if (firstDimSize == 0) {
+      throw std::invalid_argument(
+          "FirstDimDistribution must not be empty or have zero size.");
+    }
+    this->push_back(firstDimSize);
+    // Add the other dimensions
+    this->insert(this->end(), otherDims.begin(), otherDims.end());
+  }
+
   /// Create a shape with the given dimensions
-  explicit TensorShape(std::vector<size_t> dims) : std::vector<size_t>(dims) {
+  explicit TensorShape(const std::vector<size_t> &dims)
+      : std::vector<size_t>(dims) {
     if (this->empty()) {
       // Empty shapes are handled as scalar shapes
       this->push_back(1);
@@ -120,8 +138,6 @@ class TensorShape : private std::vector<size_t> {
 
   const std::vector<size_t> &toPoplar() const { return *this; }
 };
-
-using FirstDimDistribution = VectorMap<size_t>;
 
 /// Represents the shape of a tensor and how it is distributed across tiles
 /// along its first dimension. Empty shapes are equivalent to scalar shapes.
@@ -309,8 +325,8 @@ class DistributedShape {
 
   /**
    * Groups the first dimension of the shape by the specified group size. For
-   * example, grouping the first dimension distribution {0: 1, 1: 1, 2: 1, 3: 1}
-   * with a group size of 2 will result in {0: 2, 1:, 0, 2: 2, 3: 0}.
+   * example, grouping the first dimension distribution {0: 1, 1: 1, 2: 1, 3:
+   * 1} with a group size of 2 will result in {0: 2, 1:, 0, 2: 2, 3: 0}.
    *
    * @param groupSize The size of the group to combine elements of the first
    * dimension. If groupSize is 1, the original shape is returned.
@@ -362,18 +378,19 @@ class DistributedShape {
         shape1.rank() > shape2.rank() ? shape2 : shape1;
     DistributedShape broadcastedShape = longerShape;
 
-    // Check compatibility of dimensions by working right-to-left (last dimension to first)
+    // Check compatibility of dimensions by working right-to-left (last
+    // dimension to first)
     size_t rankDiff = longerShape.rank() - shorterShape.rank();
-    
+
     // First, check the common dimensions (from the end)
     for (size_t i = 0; i < shorterShape.rank(); ++i) {
       // Compare the right-aligned dimensions
       size_t longerIdx = longerShape.rank() - 1 - i;
       size_t shorterIdx = shorterShape.rank() - 1 - i;
-      
+
       size_t longerDim = longerShape[longerIdx];
       size_t shorterDim = shorterShape[shorterIdx];
-      
+
       if (longerDim == 1) {
         broadcastedShape.globalShape()[longerIdx] = shorterDim;
       } else if (shorterDim == 1) {
@@ -388,7 +405,7 @@ class DistributedShape {
         return std::nullopt;
       }
     }
-    
+
     // For the first dimension, check if the distributions are compatible
     if (shape1.firstDimDistribution() != shape2.firstDimDistribution()) {
       if (shape1[0] == 1) {
@@ -396,12 +413,11 @@ class DistributedShape {
       } else if (shape2[0] == 1) {
         broadcastedShape.firstDimDistribution() = shape1.firstDimDistribution();
       } else {
-        spdlog::trace(
-            "Shapes have incompatible first dimension distributions");
+        spdlog::trace("Shapes have incompatible first dimension distributions");
         return std::nullopt;
       }
     }
-    
+
     return broadcastedShape;
   }
 };
