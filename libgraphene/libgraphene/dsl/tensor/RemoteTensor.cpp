@@ -58,4 +58,31 @@ Tensor RemoteTensor::copyToTile() const {
 
   return Tensor::fromPoplar(tensor, type_);
 }
+
+void RemoteTensor::copyToTile(Tensor &existingTensor) const {
+  GRAPHENE_TRACEPOINT();
+  DebugInfo di("RemoteValue");
+  di.add("debugStr", debugStr_);
+
+  if (existingTensor.type() != type_) {
+    throw std::invalid_argument("Tensor type mismatch");
+  }
+
+  if (existingTensor.shape() != shape_) {
+    throw std::invalid_argument("Tensor shape mismatch");
+  }
+
+  TileMapping ipuMapping =
+      tileMapping_.translateToIPUMapping(Context::graph().getTarget().getTilesPerIPU());
+
+  size_t numIPUs = ipuMapping.maxTile() + 1;
+  for (size_t ipu = 0; ipu < numIPUs; ++ipu) {
+    size_t numElements = ipuMapping.numElementsOnTile(ipu);
+    if (numElements == 0) continue;
+
+    poplar::RemoteBuffer buffer = buffers_.at(ipu);
+    Context::program().add(poplar::program::Copy(
+        buffer, sliceTensorToIPU(existingTensor.tensor(), ipu, tileMapping_), di));
+  }
+}
 }  // namespace graphene

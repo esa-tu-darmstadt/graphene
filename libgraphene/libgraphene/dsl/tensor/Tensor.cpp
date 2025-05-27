@@ -393,6 +393,32 @@ RemoteTensor Tensor::copyToRemote() const {
                       tensor().getDebugStr());
 }
 
+void Tensor::copyToRemote(RemoteTensor &existingRemoteTensor) const {
+  GRAPHENE_TRACEPOINT();
+  DebugInfo di("Tensor", DI_ARGS(tensor()));
+
+  if (existingRemoteTensor.type() != type()) {
+    throw std::invalid_argument("RemoteTensor type mismatch");
+  }
+
+  TileMapping ipuMapping = tileMapping().translateToIPUMapping(
+      Context::graph().getTarget().getTilesPerIPU());
+
+  size_t numIPUs = ipuMapping.maxTile() + 1;
+  for (size_t ipu = 0; ipu < numIPUs; ++ipu) {
+    size_t numElements = ipuMapping.numElementsOnTile(ipu);
+    if (numElements == 0) continue;
+
+    if (existingRemoteTensor.buffers_.find(ipu) == existingRemoteTensor.buffers_.end()) {
+      throw std::invalid_argument("RemoteTensor missing buffer for IPU " + std::to_string(ipu));
+    }
+
+    poplar::RemoteBuffer buffer = existingRemoteTensor.buffers_.at(ipu);
+    Context::program().add(poplar::program::Copy(
+        sliceTensorToIPU(tensor(), ipu, tileMapping()), buffer, di));
+  }
+}
+
 Expression Tensor::norm(VectorNorm type) const {
   GRAPHENE_TRACEPOINT();
   DebugInfo di("Tensor", DI_ARGS(tensor()));

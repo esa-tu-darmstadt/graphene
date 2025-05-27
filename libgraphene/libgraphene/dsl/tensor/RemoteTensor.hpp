@@ -40,6 +40,7 @@ class Tensor;
  *
  */
 class RemoteTensor {
+  friend class Tensor;
   TypeRef type_;
   // Remote buffers for each IPU
   std::unordered_map<size_t, poplar::RemoteBuffer> buffers_;
@@ -78,6 +79,13 @@ class RemoteTensor {
    * @return A Value object representing the copied tensor in tile memory.
    */
   [[nodiscard]] Tensor copyToTile() const;
+
+  /**
+   * @brief Copies the remote tensor to an existing tile tensor.
+   *
+   * @param existingTensor The existing tensor to copy into.
+   */
+  void copyToTile(Tensor &existingTensor) const;
 
   /**
    * @brief Gets the element type of the remote tensor.

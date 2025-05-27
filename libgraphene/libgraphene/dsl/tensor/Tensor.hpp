@@ -180,6 +180,13 @@ class Tensor : public Expression {
   RemoteTensor copyToRemote() const;
 
   /**
+   * @brief Copy the value to an existing remote tensor.
+   *
+   * @param existingRemoteTensor The existing remote tensor to copy into.
+   */
+  void copyToRemote(RemoteTensor &existingRemoteTensor) const;
+
+  /**
    * @brief Copy the value to the host memory. When the copy is complete, the
    * callback is called with the filled HostTensor. The host tensor is only
    * valid in the callback, and will be deallocated after the callback returns.
