@@ -221,3 +221,11 @@ class Expression : public Value {
 };
 
 }  // namespace graphene::codedsl
+
+template <>
+class std::hash<graphene::codedsl::Value> {
+ public:
+  size_t operator()(const graphene::codedsl::Value& value) const {
+    return std::hash<std::string>()(value.expr());
+  }
+};
