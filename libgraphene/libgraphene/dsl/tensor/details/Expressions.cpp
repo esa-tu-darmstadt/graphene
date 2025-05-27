@@ -126,6 +126,138 @@ size_t BinaryExpr::hash() const {
 }
 
 //--------------------------------------------------------------------------
+// DotProductExpr implementation
+//--------------------------------------------------------------------------
+DotProductExpr::DotProductExpr(std::unique_ptr<ExpressionBase> lhs,
+                               std::unique_ptr<ExpressionBase> rhs)
+    : ExpressionBase(inferType(BinaryOpType::DOT_PRODUCT, lhs->type(), rhs->type())),
+      lhs_(std::move(lhs)),
+      rhs_(std::move(rhs)) {
+  // Validate that both operands are vector fields (rank 2, second dim > 1)
+  auto lhsShape = lhs_->shape();
+  auto rhsShape = rhs_->shape();
+  
+  if (lhsShape.rank() != 2 || rhsShape.rank() != 2) {
+    throw std::runtime_error("Dot product requires rank 2 tensors (vector fields)");
+  }
+  
+  if (lhsShape.globalShape()[1] <= 1 || rhsShape.globalShape()[1] <= 1) {
+    throw std::runtime_error("Dot product requires second dimension > 1 for vector fields");
+  }
+  
+  if (lhsShape.globalShape()[1] != rhsShape.globalShape()[1]) {
+    throw std::runtime_error("Dot product requires vectors of the same length");
+  }
+  
+  // Check that shapes are compatible for broadcasting
+  auto maybeShape = DistributedShape::broadcast(lhsShape, rhsShape);
+  if (!maybeShape) {
+    throw std::runtime_error("Shapes are not compatible for broadcasting in dot product");
+  }
+}
+
+ExpressionBase* DotProductExpr::lhs() const { return lhs_.get(); }
+
+ExpressionBase* DotProductExpr::rhs() const { return rhs_.get(); }
+
+std::string DotProductExpr::getName() const { return "dot_product"; }
+
+std::string DotProductExpr::getAsString() const {
+  return getName() + "(" + lhs_->getAsString() + ", " + rhs_->getAsString() + ")";
+}
+
+DistributedShape DotProductExpr::shape() const {
+  // Dot product: broadcast first, then reduce second dimension
+  auto lhsShape = lhs_->shape();
+  auto rhsShape = rhs_->shape();
+  
+  auto broadcastShape = DistributedShape::broadcast(lhsShape, rhsShape).value();
+  
+  // Reduce the vector dimension (second dim becomes 1)
+  DistributedShape outputShape = broadcastShape;
+  outputShape.globalShape()[1] = 1;
+  
+  return outputShape;
+}
+
+TileMapping DotProductExpr::tileMapping() const {
+  return TileMapping::linearMappingWithShape(shape());
+}
+
+std::unique_ptr<ExpressionBase> DotProductExpr::clone() const {
+  return std::make_unique<DotProductExpr>(lhs_->clone(), rhs_->clone());
+}
+
+std::any DotProductExpr::accept(ExpressionVisitor& visitor, std::any arg) {
+  return visitor.visit(*this, arg);
+}
+
+size_t DotProductExpr::hash() const {
+  return graphene::hash("dot_product", type(), lhs_->hash(), rhs_->hash());
+}
+
+//--------------------------------------------------------------------------
+// CrossProductExpr implementation
+//--------------------------------------------------------------------------
+CrossProductExpr::CrossProductExpr(std::unique_ptr<ExpressionBase> lhs,
+                                   std::unique_ptr<ExpressionBase> rhs)
+    : ExpressionBase(inferType(BinaryOpType::CROSS_PRODUCT, lhs->type(), rhs->type())),
+      lhs_(std::move(lhs)),
+      rhs_(std::move(rhs)) {
+  // Validate that both operands are 3D vector fields
+  auto lhsShape = lhs_->shape();
+  auto rhsShape = rhs_->shape();
+  
+  if (lhsShape.rank() != 2 || rhsShape.rank() != 2) {
+    throw std::runtime_error("Cross product requires rank 2 tensors (vector fields)");
+  }
+  
+  if (lhsShape.globalShape()[1] != 3 || rhsShape.globalShape()[1] != 3) {
+    throw std::runtime_error("Cross product only works with 3D vectors (second dimension must be 3)");
+  }
+  
+  // Check that shapes are compatible for broadcasting
+  auto maybeShape = DistributedShape::broadcast(lhsShape, rhsShape);
+  if (!maybeShape) {
+    throw std::runtime_error("Shapes are not compatible for broadcasting in cross product");
+  }
+}
+
+ExpressionBase* CrossProductExpr::lhs() const { return lhs_.get(); }
+
+ExpressionBase* CrossProductExpr::rhs() const { return rhs_.get(); }
+
+std::string CrossProductExpr::getName() const { return "cross_product"; }
+
+std::string CrossProductExpr::getAsString() const {
+  return getName() + "(" + lhs_->getAsString() + ", " + rhs_->getAsString() + ")";
+}
+
+DistributedShape CrossProductExpr::shape() const {
+  // Cross product: broadcast the shapes, keep vector dimension as 3
+  auto lhsShape = lhs_->shape();
+  auto rhsShape = rhs_->shape();
+  
+  return DistributedShape::broadcast(lhsShape, rhsShape).value();
+}
+
+TileMapping CrossProductExpr::tileMapping() const {
+  return TileMapping::linearMappingWithShape(shape());
+}
+
+std::unique_ptr<ExpressionBase> CrossProductExpr::clone() const {
+  return std::make_unique<CrossProductExpr>(lhs_->clone(), rhs_->clone());
+}
+
+std::any CrossProductExpr::accept(ExpressionVisitor& visitor, std::any arg) {
+  return visitor.visit(*this, arg);
+}
+
+size_t CrossProductExpr::hash() const {
+  return graphene::hash("cross_product", type(), lhs_->hash(), rhs_->hash());
+}
+
+//--------------------------------------------------------------------------
 // InputExpr implementation
 //--------------------------------------------------------------------------
 InputExpr::InputExpr(poplar::Tensor tensor, TypeRef type)
@@ -428,6 +560,16 @@ std::any ExpressionVisitor::visit(UnaryExpr& expr, std::any arg) {
   return {};
 }
 std::any ExpressionVisitor::visit(BinaryExpr& expr, std::any arg) {
+  expr.lhs()->accept(*this, arg);
+  expr.rhs()->accept(*this, arg);
+  return {};
+}
+std::any ExpressionVisitor::visit(DotProductExpr& expr, std::any arg) {
+  expr.lhs()->accept(*this, arg);
+  expr.rhs()->accept(*this, arg);
+  return {};
+}
+std::any ExpressionVisitor::visit(CrossProductExpr& expr, std::any arg) {
   expr.lhs()->accept(*this, arg);
   expr.rhs()->accept(*this, arg);
   return {};

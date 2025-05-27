@@ -137,6 +137,31 @@ GRAPHENE_DEFINE_EXPR_BINARY_OP_AND_SYMBOL(Shl, SHIFT_LEFT, <<)
 GRAPHENE_DEFINE_EXPR_BINARY_OP_AND_SYMBOL(Shr, SHIFT_RIGHT, >>)
 GRAPHENE_DEFINE_EXPR_BINARY_OP_AND_SYMBOL(Sub, SUBTRACT, -)
 
+// Vector operations with custom expression classes
+namespace ops {
+
+template <DataTypeOrExpression T1, DataTypeOrExpression T2>
+requires AtLeastOneExpression<T1, T2>
+inline Expression DotProduct(const T1 &lhs, const T2 &rhs) {
+  auto lhsExpr = detail::wrapInExpression(lhs);
+  auto rhsExpr = detail::wrapInExpression(rhs);
+
+  return Expression(std::make_unique<detail::DotProductExpr>(
+      lhsExpr.base().clone(), rhsExpr.base().clone()));
+}
+
+template <DataTypeOrExpression T1, DataTypeOrExpression T2>
+requires AtLeastOneExpression<T1, T2>
+inline Expression CrossProduct(const T1 &lhs, const T2 &rhs) {
+  auto lhsExpr = detail::wrapInExpression(lhs);
+  auto rhsExpr = detail::wrapInExpression(rhs);
+
+  return Expression(std::make_unique<detail::CrossProductExpr>(
+      lhsExpr.base().clone(), rhsExpr.base().clone()));
+}
+
+}  // namespace ops
+
 #undef GRAPHENE_DEFINE_EXPR_BINARY_OP
 #undef GRAPHENE_DEFINE_EXPR_BINARY_OP_AND_SYMBOL
 

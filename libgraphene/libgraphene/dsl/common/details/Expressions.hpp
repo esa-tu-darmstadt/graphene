@@ -53,6 +53,8 @@ enum class BinaryOpType {
   SHIFT_LEFT,
   SHIFT_RIGHT,
   SUBTRACT,
+  DOT_PRODUCT,
+  CROSS_PRODUCT,
 };
 
 enum class UnaryOpType {

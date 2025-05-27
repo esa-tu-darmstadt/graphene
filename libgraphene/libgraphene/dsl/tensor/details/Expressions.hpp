@@ -35,6 +35,8 @@ namespace graphene::detail {
 
 class UnaryExpr;
 class BinaryExpr;
+class DotProductExpr;
+class CrossProductExpr;
 class InputExpr;
 class CastExpr;
 class ConstExpr;
@@ -42,8 +44,11 @@ class PermuteExpr;
 class BroadcastExpr;
 
 struct ExpressionVisitor {
+  virtual ~ExpressionVisitor() = default;
   virtual std::any visit(UnaryExpr& expr, std::any arg);
   virtual std::any visit(BinaryExpr& expr, std::any arg);
+  virtual std::any visit(DotProductExpr& expr, std::any arg);
+  virtual std::any visit(CrossProductExpr& expr, std::any arg);
   virtual std::any visit(InputExpr& expr, std::any arg);
   virtual std::any visit(CastExpr& expr, std::any arg);
   virtual std::any visit(ConstExpr& expr, std::any arg);
@@ -109,6 +114,54 @@ class BinaryExpr : public ExpressionBase {
   ExpressionBase* lhs() const;
   ExpressionBase* rhs() const;
   BinaryOpType op() const;
+
+  std::string getName() const override;
+  std::string getAsString() const override;
+  DistributedShape shape() const override;
+  TileMapping tileMapping() const override;
+  size_t hash() const override;
+
+  std::unique_ptr<ExpressionBase> clone() const override;
+
+  std::any accept(ExpressionVisitor& visitor, std::any arg = {}) override;
+};
+
+class DotProductExpr : public ExpressionBase {
+  std::unique_ptr<ExpressionBase> lhs_;
+  std::unique_ptr<ExpressionBase> rhs_;
+
+ public:
+  DotProductExpr() = delete;
+  DotProductExpr(std::unique_ptr<ExpressionBase> lhs,
+                 std::unique_ptr<ExpressionBase> rhs);
+  ~DotProductExpr() override = default;
+
+  ExpressionBase* lhs() const;
+  ExpressionBase* rhs() const;
+
+  std::string getName() const override;
+  std::string getAsString() const override;
+  DistributedShape shape() const override;
+  TileMapping tileMapping() const override;
+  size_t hash() const override;
+
+  std::unique_ptr<ExpressionBase> clone() const override;
+
+  std::any accept(ExpressionVisitor& visitor, std::any arg = {}) override;
+};
+
+class CrossProductExpr : public ExpressionBase {
+  std::unique_ptr<ExpressionBase> lhs_;
+  std::unique_ptr<ExpressionBase> rhs_;
+
+ public:
+  CrossProductExpr() = delete;
+  CrossProductExpr(std::unique_ptr<ExpressionBase> lhs,
+                   std::unique_ptr<ExpressionBase> rhs);
+  ~CrossProductExpr() override = default;
+
+  ExpressionBase* lhs() const;
+  ExpressionBase* rhs() const;
 
   std::string getName() const override;
   std::string getAsString() const override;

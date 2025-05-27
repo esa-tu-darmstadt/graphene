@@ -24,6 +24,7 @@
 #include <cstddef>
 #include <iterator>
 #include <stdexcept>
+#include <unordered_map>
 
 #include "libgraphene/common/Concepts.hpp"
 #include "libgraphene/common/Helpers.hpp"
@@ -86,21 +87,25 @@ struct CollectInputsVisitor : detail::ExpressionVisitor {
   std::vector<TypeRef> &types;
   std::vector<codedsl::VertexInOutType::Direction> &directions;
   std::vector<DistributedShape> &shapes;
+  std::vector<detail::InputExpr *> &inputExprs;
 
   CollectInputsVisitor(
       std::vector<poplar::Tensor> &tensors, std::vector<TypeRef> &types,
       std::vector<codedsl::VertexInOutType::Direction> &directions,
-      std::vector<DistributedShape> &shapes)
+      std::vector<DistributedShape> &shapes,
+      std::vector<detail::InputExpr *> &inputExprs)
       : tensors(tensors),
         types(types),
         directions(directions),
-        shapes(shapes) {}
+        shapes(shapes),
+        inputExprs(inputExprs) {}
 
   std::any visit(detail::InputExpr &expr, std::any arg) final {
     tensors.push_back(expr.tensor());
     types.push_back(expr.type());
     directions.push_back(codedsl::VertexInOutType::Direction::Input);
     shapes.push_back(expr.shape());
+    inputExprs.push_back(&expr);
     return {};
   }
 };
@@ -168,11 +173,31 @@ std::optional<codedsl::Value> getFirstDimensionSize(
 
 /// A visitor that translates an expression tree into a CodeDSL expression
 struct GenerateCodeForExpressionVisitor : detail::ExpressionVisitor {
-  std::vector<codedsl::Value> &inputs;
-  unsigned currentInputIndex = 0;
+  std::unordered_map<detail::InputExpr *, codedsl::Value> inputMapping;
 
-  GenerateCodeForExpressionVisitor(std::vector<codedsl::Value> &inputs)
-      : inputs(inputs) {}
+  struct compareValueByExpression {
+    bool operator()(const codedsl::Value &lhs,
+                    const codedsl::Value &rhs) const {
+      return lhs.expr() == rhs.expr();
+    }
+  };
+  // A table that maps each unique input value to a variable. Used to eliminate
+  // redundant loads of the same input value, which poplar seems to have
+  // problems with identifying.
+  std::unordered_map<codedsl::Value, codedsl::Value, std::hash<codedsl::Value>,
+                     compareValueByExpression>
+      inputTable;
+
+  GenerateCodeForExpressionVisitor(
+      const std::vector<codedsl::Value> &inputValues,
+      const std::vector<detail::InputExpr *> &inputExprs) {
+    assert(inputValues.size() == inputExprs.size());
+    for (size_t i = 0; i < inputValues.size(); ++i) {
+      inputMapping.emplace(inputExprs[i], inputValues[i]);
+      // inputMapping[inputExprs[i]] = inputValues[i];
+    }
+  }
+  ~GenerateCodeForExpressionVisitor() override = default;
 
   std::any visit(detail::ConstExpr &expr, std::any indices) final {
     // If the expression is a scalar, we can just return the value. Scalars are
@@ -196,14 +221,28 @@ struct GenerateCodeForExpressionVisitor : detail::ExpressionVisitor {
     auto indexVector = std::any_cast<std::vector<codedsl::Value>>(indices);
 
     DistributedShape inputShape = expr.shape();
-    codedsl::Value input = inputs[currentInputIndex++];
+    codedsl::Value input = inputMapping.at(&expr);
 
     assert(inputShape.rank() <= indexVector.size() &&
            "output shape too small for given indices");
 
     codedsl::Value flattenedIndex = getFlattenedIndex(indexVector, inputShape);
+    codedsl::Value result = input[flattenedIndex];
 
-    return input[flattenedIndex];
+    // Poplar seems to be bad in eliminating redundant loads, so we assign each
+    // unique input value to a variable and store it in a table.
+
+    // Check if the input has already been added to the input table
+    if (inputTable.contains(result)) {
+      return inputTable.at(result);
+    }
+
+    // If the input has not been added yet, we add it to the input table
+
+    codedsl::Variable var = input[flattenedIndex];
+    inputTable.emplace(result, var);
+
+    return (codedsl::Value)var;
   }
   std::any visit(detail::BroadcastExpr &expr, std::any indices) final {
     return expr.arg()->accept(*this, indices);
@@ -240,6 +279,92 @@ struct GenerateCodeForExpressionVisitor : detail::ExpressionVisitor {
 
     return expr.arg()->accept(*this, permutedIndices);
   }
+
+  std::any visit(detail::DotProductExpr &expr, std::any indices) final {
+    auto indexVector = std::any_cast<std::vector<codedsl::Value>>(indices);
+
+    // For dot product: we iterate over the vector dimension and accumulate
+    // The output index has only the first dimension (second dim is reduced to
+    // 1)
+
+    // Get the first element index (spatial position)
+    codedsl::Value firstDimIndex = indexVector[0];
+
+    // Get vector length from input shapes
+    auto lhsShape = expr.lhs()->shape();
+    size_t vectorLength = lhsShape.globalShape()[1];
+
+    // Initialize accumulator
+    // use unique_ptr to avoid triggering the assignment operator
+    std::unique_ptr<codedsl::Value> result =
+        std::make_unique<codedsl::Value>(codedsl::Expression(expr.type(), "0"));
+
+    // Loop over vector components
+    for (size_t i = 0; i < vectorLength; ++i) {
+      std::vector<codedsl::Value> lhsIndices = {
+          firstDimIndex,
+          (codedsl::Value)codedsl::Expression(Type::UINT32, std::to_string(i))};
+      std::vector<codedsl::Value> rhsIndices = {
+          firstDimIndex,
+          (codedsl::Value)codedsl::Expression(Type::UINT32, std::to_string(i))};
+
+      auto lhsValue =
+          std::any_cast<codedsl::Value>(expr.lhs()->accept(*this, lhsIndices));
+      auto rhsValue =
+          std::any_cast<codedsl::Value>(expr.rhs()->accept(*this, rhsIndices));
+
+      result = std::make_unique<codedsl::Value>(*result + lhsValue * rhsValue);
+    }
+
+    return *result;
+  }
+
+  std::any visit(detail::CrossProductExpr &expr, std::any indices) final {
+    auto indexVector = std::any_cast<std::vector<codedsl::Value>>(indices);
+
+    // For cross product: compute a x b = [a1*b2 - a2*b1, a2*b0 - a0*b2, a0*b1 -
+    // a1*b0] The output has the same shape as inputs
+
+    codedsl::Value firstDimIndex = indexVector[0];
+    codedsl::Value secondDimIndex = indexVector[1];
+
+    // Get all components of both vectors
+    std::vector<codedsl::Value> aComponents;
+    std::vector<codedsl::Value> bComponents;
+    aComponents.reserve(3);
+    bComponents.reserve(3);
+
+    for (size_t i = 0; i < 3; ++i) {
+      std::vector<codedsl::Value> indices_i = {
+          firstDimIndex,
+          (codedsl::Value)codedsl::Expression(Type::UINT32, std::to_string(i))};
+      aComponents.push_back(
+          std::any_cast<codedsl::Value>(expr.lhs()->accept(*this, indices_i)));
+      bComponents.push_back(
+          std::any_cast<codedsl::Value>(expr.rhs()->accept(*this, indices_i)));
+    }
+
+    // Convert secondDimIndex to uint32 for comparison
+    codedsl::Value componentIndex = secondDimIndex.cast(Type::UINT32);
+
+    // Cross product components: [a1*b2 - a2*b1, a2*b0 - a0*b2, a0*b1 - a1*b0]
+    codedsl::Value result0 =
+        aComponents[1] * bComponents[2] - aComponents[2] * bComponents[1];
+    codedsl::Value result1 =
+        aComponents[2] * bComponents[0] - aComponents[0] * bComponents[2];
+    codedsl::Value result2 =
+        aComponents[0] * bComponents[1] - aComponents[1] * bComponents[0];
+
+    // Select the appropriate component based on the second dimension index
+    codedsl::Value zero =
+        (codedsl::Value)codedsl::Expression(Type::UINT32, "0");
+    codedsl::Value one = (codedsl::Value)codedsl::Expression(Type::UINT32, "1");
+    codedsl::Value two = (codedsl::Value)codedsl::Expression(Type::UINT32, "2");
+
+    return (codedsl::Value)codedsl::Select(
+        componentIndex == zero, result0,
+        codedsl::Select(componentIndex == one, result1, result2));
+  }
 };
 
 /// Materializes an expression into a poplar tensor. The output shape may differ
@@ -262,12 +387,13 @@ void materializeExpressionInto(
   std::vector<TypeRef> inputsAndOutputTypes;
   std::vector<codedsl::VertexInOutType::Direction> inputsAndOutputDirections;
   std::vector<DistributedShape> inputsAndOutputShapes;
+  std::vector<detail::InputExpr *> inputExprs;
 
   // Collect the input tensors
   {
     CollectInputsVisitor visitor(inputsAndOutputTensors, inputsAndOutputTypes,
                                  inputsAndOutputDirections,
-                                 inputsAndOutputShapes);
+                                 inputsAndOutputShapes, inputExprs);
     exprBase.accept(visitor);
   }
 
@@ -299,7 +425,12 @@ void materializeExpressionInto(
     codedsl::Value output = args.back();
     std::vector<codedsl::Value> inputsAndOutputVariables(firstInputIt,
                                                          args.end());
-    GenerateCodeForExpressionVisitor visitor(inputsAndOutputVariables);
+
+    // Extract just the input tensors (excluding the output)
+    std::vector<codedsl::Value> inputValues(inputsAndOutputVariables.begin(),
+                                            inputsAndOutputVariables.end() - 1);
+
+    GenerateCodeForExpressionVisitor visitor(inputValues, inputExprs);
 
     // Calculate the shape of the iteration range (aka the input of the
     // expression) on the executing tile. Tensors are distributed across tiles
@@ -400,7 +531,7 @@ void materializeExpressionInto(
   codedsl::ExecuteAsMapped(memberVars,
                            multipleWorkers ? codedsl::VertexKind::MultiVertex
                                            : codedsl::VertexKind::Vertex,
-                           code);
+                           code, true);
 }
 }  // namespace
 

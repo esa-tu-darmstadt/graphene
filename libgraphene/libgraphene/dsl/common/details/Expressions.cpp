@@ -106,6 +106,14 @@ TypeRef inferType(BinaryOpType op, TypeRef lhs, TypeRef rhs) {
     case BinaryOpType::MINIMUM:
       return largerType(lhs, rhs);
 
+    case BinaryOpType::DOT_PRODUCT:
+      // Dot product always returns a scalar of the larger type
+      return largerType(lhs, rhs);
+
+    case BinaryOpType::CROSS_PRODUCT:
+      // Cross product returns a vector of the same type
+      return largerType(lhs, rhs);
+
     default:
       throw std::runtime_error("Unsupported binary operation type");
   }
@@ -221,7 +229,9 @@ std::string_view to_string(BinaryOpType op) {
       {BinaryOpType::POWER, "power"},
       {BinaryOpType::ATAN2, "atan2"},
       {BinaryOpType::MAXIMUM, "maximum"},
-      {BinaryOpType::MINIMUM, "minimum"}};
+      {BinaryOpType::MINIMUM, "minimum"},
+      {BinaryOpType::DOT_PRODUCT, "dot_product"},
+      {BinaryOpType::CROSS_PRODUCT, "cross_product"}};
 
   auto it = opStrings.find(op);
   if (it != opStrings.end()) {
