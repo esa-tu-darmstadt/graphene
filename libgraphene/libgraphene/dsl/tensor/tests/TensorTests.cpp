@@ -225,22 +225,24 @@ TEST_F(TensorTest, ReduceSameTiles) {
 TEST_F(TensorTest, DotProductSameShape) {
   Runtime runtime(1);
   bool callbackCalled = false;
-  
+
   // Create 2x3 vector fields (2 vectors with 3 components each)
   std::vector<float> data1 = {1.0f, 2.0f, 3.0f, 4.0f, 5.0f, 6.0f};
   std::vector<float> data2 = {2.0f, 3.0f, 4.0f, 1.0f, 2.0f, 1.0f};
-  
+
   DistributedShape shape = DistributedShape::onSingleTile({2, 3}, 0);
   TileMapping mapping = TileMapping::linearMappingWithShape(shape);
-  
-  HostTensor host1 = HostTensor::createPersistent(std::move(data1), shape, mapping, "vec1");
-  HostTensor host2 = HostTensor::createPersistent(std::move(data2), shape, mapping, "vec2");
+
+  HostTensor host1 =
+      HostTensor::createPersistent(std::move(data1), shape, mapping, "vec1");
+  HostTensor host2 =
+      HostTensor::createPersistent(std::move(data2), shape, mapping, "vec2");
 
   RemoteTensor remote1 = host1.copyToRemote();
   RemoteTensor remote2 = host2.copyToRemote();
   Tensor tensor1 = remote1.copyToTile();
   Tensor tensor2 = remote2.copyToTile();
-  
+
   // Compute dot product
   Expression dotResult = ops::DotProduct(tensor1, tensor2);
   Tensor result = dotResult.materialize();
@@ -262,22 +264,24 @@ TEST_F(TensorTest, DotProductSameShape) {
 TEST_F(TensorTest, CrossProductSameShape) {
   Runtime runtime(1);
   bool callbackCalled = false;
-  
+
   // Create 2x3 vector fields (2 3D vectors)
   std::vector<float> data1 = {1.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f};
   std::vector<float> data2 = {0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 1.0f};
-  
+
   DistributedShape shape = DistributedShape::onSingleTile({2, 3}, 0);
   TileMapping mapping = TileMapping::linearMappingWithShape(shape);
-  
-  HostTensor host1 = HostTensor::createPersistent(std::move(data1), shape, mapping, "vec1");
-  HostTensor host2 = HostTensor::createPersistent(std::move(data2), shape, mapping, "vec2");
+
+  HostTensor host1 =
+      HostTensor::createPersistent(std::move(data1), shape, mapping, "vec1");
+  HostTensor host2 =
+      HostTensor::createPersistent(std::move(data2), shape, mapping, "vec2");
 
   RemoteTensor remote1 = host1.copyToRemote();
   RemoteTensor remote2 = host2.copyToRemote();
   Tensor tensor1 = remote1.copyToTile();
   Tensor tensor2 = remote2.copyToTile();
-  
+
   // Compute cross product
   Expression crossResult = ops::CrossProduct(tensor1, tensor2);
   Tensor result = crossResult.materialize();
@@ -303,22 +307,24 @@ TEST_F(TensorTest, CrossProductSameShape) {
 TEST_F(TensorTest, AdditionSameShape) {
   Runtime runtime(1);
   bool callbackCalled = false;
-  
+
   // Create 2x3 tensors for addition
   std::vector<float> data1 = {1.0f, 2.0f, 3.0f, 4.0f, 5.0f, 6.0f};
   std::vector<float> data2 = {10.0f, 20.0f, 30.0f, 40.0f, 50.0f, 60.0f};
-  
+
   DistributedShape shape = DistributedShape::onSingleTile({2, 3}, 0);
   TileMapping mapping = TileMapping::linearMappingWithShape(shape);
-  
-  HostTensor host1 = HostTensor::createPersistent(std::move(data1), shape, mapping, "tensor1");
-  HostTensor host2 = HostTensor::createPersistent(std::move(data2), shape, mapping, "tensor2");
+
+  HostTensor host1 =
+      HostTensor::createPersistent(std::move(data1), shape, mapping, "tensor1");
+  HostTensor host2 =
+      HostTensor::createPersistent(std::move(data2), shape, mapping, "tensor2");
 
   RemoteTensor remote1 = host1.copyToRemote();
   RemoteTensor remote2 = host2.copyToRemote();
   Tensor tensor1 = remote1.copyToTile();
   Tensor tensor2 = remote2.copyToTile();
-  
+
   // Compute addition
   Expression addResult = tensor1 + tensor2;
   Tensor result = addResult.materialize();
@@ -343,24 +349,26 @@ TEST_F(TensorTest, AdditionSameShape) {
 TEST_F(TensorTest, AdditionWithBroadcasting) {
   Runtime runtime(1);
   bool callbackCalled = false;
-  
+
   // Create 1x3 tensor (for broadcasting) and 2x3 tensor
   std::vector<float> data1 = {100.0f, 200.0f, 300.0f};
   std::vector<float> data2 = {1.0f, 2.0f, 3.0f, 4.0f, 5.0f, 6.0f};
-  
+
   DistributedShape shape1 = DistributedShape::onSingleTile({1, 3}, 0);
   DistributedShape shape2 = DistributedShape::onSingleTile({2, 3}, 0);
   TileMapping mapping1 = TileMapping::linearMappingWithShape(shape1);
   TileMapping mapping2 = TileMapping::linearMappingWithShape(shape2);
-  
-  HostTensor host1 = HostTensor::createPersistent(std::move(data1), shape1, mapping1, "tensor1");
-  HostTensor host2 = HostTensor::createPersistent(std::move(data2), shape2, mapping2, "tensor2");
+
+  HostTensor host1 = HostTensor::createPersistent(std::move(data1), shape1,
+                                                  mapping1, "tensor1");
+  HostTensor host2 = HostTensor::createPersistent(std::move(data2), shape2,
+                                                  mapping2, "tensor2");
 
   RemoteTensor remote1 = host1.copyToRemote();
   RemoteTensor remote2 = host2.copyToRemote();
   Tensor tensor1 = remote1.copyToTile();
   Tensor tensor2 = remote2.copyToTile();
-  
+
   // Compute addition (should broadcast first tensor)
   Expression addResult = tensor1 + tensor2;
   Tensor result = addResult.materialize();
@@ -385,18 +393,21 @@ TEST_F(TensorTest, AdditionWithBroadcasting) {
 TEST_F(TensorTest, AdditionAndSubtraction) {
   Runtime runtime(1);
   bool callbackCalled = false;
-  
+
   // Create 2x3 tensors for complex expression
   std::vector<float> data1 = {10.0f, 20.0f, 30.0f, 40.0f, 50.0f, 60.0f};
   std::vector<float> data2 = {1.0f, 2.0f, 3.0f, 4.0f, 5.0f, 6.0f};
   std::vector<float> data3 = {2.0f, 4.0f, 6.0f, 8.0f, 10.0f, 12.0f};
-  
+
   DistributedShape shape = DistributedShape::onSingleTile({2, 3}, 0);
   TileMapping mapping = TileMapping::linearMappingWithShape(shape);
-  
-  HostTensor host1 = HostTensor::createPersistent(std::move(data1), shape, mapping, "tensor1");
-  HostTensor host2 = HostTensor::createPersistent(std::move(data2), shape, mapping, "tensor2");
-  HostTensor host3 = HostTensor::createPersistent(std::move(data3), shape, mapping, "tensor3");
+
+  HostTensor host1 =
+      HostTensor::createPersistent(std::move(data1), shape, mapping, "tensor1");
+  HostTensor host2 =
+      HostTensor::createPersistent(std::move(data2), shape, mapping, "tensor2");
+  HostTensor host3 =
+      HostTensor::createPersistent(std::move(data3), shape, mapping, "tensor3");
 
   RemoteTensor remote1 = host1.copyToRemote();
   RemoteTensor remote2 = host2.copyToRemote();
@@ -404,7 +415,7 @@ TEST_F(TensorTest, AdditionAndSubtraction) {
   Tensor tensor1 = remote1.copyToTile();
   Tensor tensor2 = remote2.copyToTile();
   Tensor tensor3 = remote3.copyToTile();
-  
+
   // Compute complex expression: (tensor1 + tensor2) - tensor3
   Expression complexResult = (tensor1 + tensor2) - tensor3;
   Tensor result = complexResult.materialize();
@@ -412,7 +423,8 @@ TEST_F(TensorTest, AdditionAndSubtraction) {
   result.copyToHost([&](const HostTensor &host4) {
     callbackCalled = true;
     EXPECT_EQ(host4.shape(), shape);
-    // Expected results: (10+1-2, 20+2-4, 30+3-6, 40+4-8, 50+5-10, 60+6-12) = [9, 18, 27, 36, 45, 54]
+    // Expected results: (10+1-2, 20+2-4, 30+3-6, 40+4-8, 50+5-10, 60+6-12) =
+    // [9, 18, 27, 36, 45, 54]
     EXPECT_FLOAT_EQ(host4.get<float>({0, 0}), 9.0f);
     EXPECT_FLOAT_EQ(host4.get<float>({0, 1}), 18.0f);
     EXPECT_FLOAT_EQ(host4.get<float>({0, 2}), 27.0f);
@@ -423,5 +435,47 @@ TEST_F(TensorTest, AdditionAndSubtraction) {
 
   poplar::Engine engine5 = runtime.compileGraph();
   runtime.loadAndRunEngine(engine5);
+  EXPECT_TRUE(callbackCalled);
+}
+
+TEST_F(TensorTest, CrossAndDotProductSameShape) {
+  Runtime runtime(1);
+  bool callbackCalled = false;
+
+  // Create 2x3 vector fields (2 3D vectors)
+  std::vector<float> data1 = {1.0f, 2.0f, 3.0f, 4.0f, 5.0f, 6.0f};
+  std::vector<float> data2 = {11.0f, 12.0f, 13.0f, 14.0f, 15.0f, 16.0f};
+
+  DistributedShape shape = DistributedShape::onSingleTile({2, 3}, 0);
+  TileMapping mapping = TileMapping::linearMappingWithShape(shape);
+
+  HostTensor host1 =
+      HostTensor::createPersistent(std::move(data1), shape, mapping, "vec1");
+  HostTensor host2 =
+      HostTensor::createPersistent(std::move(data2), shape, mapping, "vec2");
+
+  RemoteTensor remote1 = host1.copyToRemote();
+  RemoteTensor remote2 = host2.copyToRemote();
+  Tensor tensor1 = remote1.copyToTile();
+  Tensor tensor2 = remote2.copyToTile();
+
+  // Compute dot product of cross product and second vector
+  Expression resultExpr =
+      ops::DotProduct(ops::CrossProduct(tensor1, tensor2), tensor2);
+  Tensor result = resultExpr.materialize();
+
+  result.copyToHost([&](const HostTensor &host3) {
+    callbackCalled = true;
+    EXPECT_EQ(host3.shape(), DistributedShape::onSingleTile({2, 1}, 0));
+    // All cross products will yield 0 when dotted with the second vector
+    for (size_t i = 0; i < 2; ++i) {
+      for (size_t j = 0; j < 1; ++j) {
+        EXPECT_FLOAT_EQ(host3.get<float>({i, j}), 0.0f);
+      }
+    }
+  });
+
+  poplar::Engine engine2 = runtime.compileGraph();
+  runtime.loadAndRunEngine(engine2);
   EXPECT_TRUE(callbackCalled);
 }
