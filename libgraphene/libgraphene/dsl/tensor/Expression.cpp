@@ -39,6 +39,7 @@
 #include "libgraphene/dsl/tensor/Execute.hpp"
 #include "libgraphene/dsl/tensor/Tensor.hpp"
 #include "libgraphene/dsl/tensor/details/Expressions.hpp"
+#include "libgraphene/dsl/tensor/optimization/InputExprDeduplication.hpp"
 #include "libgraphene/util/Context.hpp"
 #include "libgraphene/util/DebugInfo.hpp"
 #include "libgraphene/util/Tracepoint.hpp"
@@ -101,6 +102,11 @@ struct CollectInputsVisitor : detail::ExpressionVisitor {
         inputExprs(inputExprs) {}
 
   std::any visit(detail::InputExpr &expr, std::any arg) final {
+    if (std::find(inputExprs.begin(), inputExprs.end(), &expr) !=
+        inputExprs.end()) {
+      // Already collected this input, skip it
+      return {};
+    }
     tensors.push_back(expr.tensor());
     types.push_back(expr.type());
     directions.push_back(codedsl::VertexInOutType::Direction::Input);
@@ -245,24 +251,21 @@ struct GenerateCodeForExpressionVisitor : detail::ExpressionVisitor {
     return (codedsl::Value)var;
   }
   std::any visit(detail::BroadcastExpr &expr, std::any indices) final {
-    return expr.arg()->accept(*this, indices);
+    return expr.arg().accept(*this, indices);
   }
 
   std::any visit(detail::BinaryExpr &expr, std::any indices) final {
-    auto lhs =
-        std::any_cast<codedsl::Value>(expr.lhs()->accept(*this, indices));
-    auto rhs =
-        std::any_cast<codedsl::Value>(expr.rhs()->accept(*this, indices));
+    auto lhs = std::any_cast<codedsl::Value>(expr.lhs().accept(*this, indices));
+    auto rhs = std::any_cast<codedsl::Value>(expr.rhs().accept(*this, indices));
     return codedsl::Value(codedsl::operation(expr.op(), lhs, rhs));
   }
   std::any visit(detail::UnaryExpr &expr, std::any indices) final {
-    auto arg =
-        std::any_cast<codedsl::Value>(expr.arg()->accept(*this, indices));
+    auto arg = std::any_cast<codedsl::Value>(expr.arg().accept(*this, indices));
     return codedsl::Value(codedsl::operation(expr.op(), arg));
   }
   std::any visit(detail::CastExpr &expr, std::any indices) final {
     auto value =
-        std::any_cast<codedsl::Value>(expr.arg()->accept(*this, indices));
+        std::any_cast<codedsl::Value>(expr.arg().accept(*this, indices));
     return value.cast(expr.type());
   }
   std::any visit(detail::PermuteExpr &expr, std::any indices) final {
@@ -277,7 +280,7 @@ struct GenerateCodeForExpressionVisitor : detail::ExpressionVisitor {
       permutedIndices.push_back(indexVector[permutedIndex]);
     }
 
-    return expr.arg()->accept(*this, permutedIndices);
+    return expr.arg().accept(*this, permutedIndices);
   }
 
   std::any visit(detail::DotProductExpr &expr, std::any indices) final {
@@ -291,7 +294,7 @@ struct GenerateCodeForExpressionVisitor : detail::ExpressionVisitor {
     codedsl::Value firstDimIndex = indexVector[0];
 
     // Get vector length from input shapes
-    auto lhsShape = expr.lhs()->shape();
+    auto lhsShape = expr.lhs().shape();
     size_t vectorLength = lhsShape.globalShape()[1];
 
     // Initialize accumulator
@@ -309,9 +312,9 @@ struct GenerateCodeForExpressionVisitor : detail::ExpressionVisitor {
           (codedsl::Value)codedsl::Expression(Type::UINT32, std::to_string(i))};
 
       auto lhsValue =
-          std::any_cast<codedsl::Value>(expr.lhs()->accept(*this, lhsIndices));
+          std::any_cast<codedsl::Value>(expr.lhs().accept(*this, lhsIndices));
       auto rhsValue =
-          std::any_cast<codedsl::Value>(expr.rhs()->accept(*this, rhsIndices));
+          std::any_cast<codedsl::Value>(expr.rhs().accept(*this, rhsIndices));
 
       result = std::make_unique<codedsl::Value>(*result + lhsValue * rhsValue);
     }
@@ -339,9 +342,9 @@ struct GenerateCodeForExpressionVisitor : detail::ExpressionVisitor {
           firstDimIndex,
           (codedsl::Value)codedsl::Expression(Type::UINT32, std::to_string(i))};
       aComponents.push_back(
-          std::any_cast<codedsl::Value>(expr.lhs()->accept(*this, indices_i)));
+          std::any_cast<codedsl::Value>(expr.lhs().accept(*this, indices_i)));
       bComponents.push_back(
-          std::any_cast<codedsl::Value>(expr.rhs()->accept(*this, indices_i)));
+          std::any_cast<codedsl::Value>(expr.rhs().accept(*this, indices_i)));
     }
 
     // Convert secondDimIndex to uint32 for comparison
@@ -377,9 +380,13 @@ void materializeExpressionInto(
 
   spdlog::trace("Materializing expression: {}", expr.asString());
 
-  detail::ExpressionBase &exprBase = expr.base();
+  // Deduplicate InputExpressions to make sure that each unique input tensor
+  // becomes a single member of the generated vertex.
+  optimization::InputExprDeduplication deduplication;
+  std::unique_ptr<detail::ExpressionBase> optimizedExpr = expr.base().clone();
+  deduplication.optimize(*optimizedExpr);
 
-  if (dynamic_cast<detail::ConstExpr *>(&exprBase)) {
+  if (dynamic_cast<detail::ConstExpr *>(optimizedExpr.get())) {
     // TODO: Maybe use an optimized "fill" operation
   }
 
@@ -394,7 +401,7 @@ void materializeExpressionInto(
     CollectInputsVisitor visitor(inputsAndOutputTensors, inputsAndOutputTypes,
                                  inputsAndOutputDirections,
                                  inputsAndOutputShapes, inputExprs);
-    exprBase.accept(visitor);
+    optimizedExpr->accept(visitor);
   }
 
   // Add the output tensor
@@ -487,8 +494,8 @@ void materializeExpressionInto(
       }
     }
 
-    codedsl::Variable value =
-        std::any_cast<codedsl::Value>(exprBase.accept(visitor, inputIndices));
+    codedsl::Variable value = std::any_cast<codedsl::Value>(
+        optimizedExpr->accept(visitor, inputIndices));
     codedsl::Value outFlattenedIndex =
         getFlattenedIndex(outputIndices, outputShape);
 

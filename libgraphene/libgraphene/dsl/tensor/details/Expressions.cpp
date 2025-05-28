@@ -40,30 +40,57 @@ ExpressionBase::ExpressionBase(TypeRef type) : type_(type) {}
 
 TypeRef ExpressionBase::type() const { return type_; }
 
+const std::vector<std::shared_ptr<ExpressionBase>>& ExpressionBase::children()
+    const {
+  return children_;
+}
+
+std::shared_ptr<ExpressionBase> ExpressionBase::child(size_t index) const {
+  if (index >= children_.size()) {
+    throw std::out_of_range("Index out of range");
+  }
+  return children_[index];
+}
+
+size_t ExpressionBase::numChildren() const { return children_.size(); }
+
+void ExpressionBase::addChild(std::shared_ptr<ExpressionBase> child) {
+  children_.push_back(std::move(child));
+}
+
+void ExpressionBase::replaceChild(size_t index,
+                                  std::shared_ptr<ExpressionBase> child) {
+  if (index >= children_.size()) {
+    children_.resize(index + 1);
+  }
+  children_[index] = std::move(child);
+}
+
 //--------------------------------------------------------------------------
 // UnaryExpr implementation
 //--------------------------------------------------------------------------
-UnaryExpr::UnaryExpr(UnaryOpType op, std::unique_ptr<ExpressionBase> arg)
-    : ExpressionBase(inferType(op, arg->type())),
-      arg_(std::move(arg)),
-      op_(op) {}
+UnaryExpr::UnaryExpr(UnaryOpType op, std::shared_ptr<ExpressionBase> arg)
+    : ExpressionBase(inferType(op, arg->type())), op_(op) {
+  addChild(std::move(arg));
+}
 
-ExpressionBase* UnaryExpr::arg() const { return arg_.get(); }
+ExpressionBase& UnaryExpr::arg() const { return *child(0); }
 
 UnaryOpType UnaryExpr::op() const { return op_; }
 
 std::string UnaryExpr::getName() const { return std::string(to_string(op_)); }
 
 std::string UnaryExpr::getAsString() const {
-  return getName() + "(" + arg_->getAsString() + ")";
+  return getName() + "(" + arg().getAsString() + ")";
 }
 
-DistributedShape UnaryExpr::shape() const { return arg_->shape(); }
+DistributedShape UnaryExpr::shape() const { return arg().shape(); }
 
-TileMapping UnaryExpr::tileMapping() const { return arg_->tileMapping(); }
+TileMapping UnaryExpr::tileMapping() const { return arg().tileMapping(); }
 
 std::unique_ptr<ExpressionBase> UnaryExpr::clone() const {
-  return std::make_unique<UnaryExpr>(op_, arg_->clone());
+  return std::make_unique<UnaryExpr>(
+      op_, std::shared_ptr<ExpressionBase>(arg().clone()));
 }
 
 std::any UnaryExpr::accept(ExpressionVisitor& visitor, std::any arg) {
@@ -71,37 +98,36 @@ std::any UnaryExpr::accept(ExpressionVisitor& visitor, std::any arg) {
 }
 
 size_t UnaryExpr::hash() const {
-  return graphene::hash("unary", type(), op_, arg_->hash());
+  return graphene::hash("unary", type(), op_, arg().hash());
 }
 
 //--------------------------------------------------------------------------
 // BinaryExpr implementation
 //--------------------------------------------------------------------------
-BinaryExpr::BinaryExpr(BinaryOpType op, std::unique_ptr<ExpressionBase> lhs,
-                       std::unique_ptr<ExpressionBase> rhs)
-    : ExpressionBase(inferType(op, lhs->type(), rhs->type())),
-      lhs_(std::move(lhs)),
-      rhs_(std::move(rhs)),
-      op_(op) {
+BinaryExpr::BinaryExpr(BinaryOpType op, std::shared_ptr<ExpressionBase> lhs,
+                       std::shared_ptr<ExpressionBase> rhs)
+    : ExpressionBase(inferType(op, lhs->type(), rhs->type())), op_(op) {
+  addChild(std::move(lhs));
+  addChild(std::move(rhs));
   // Ensure that the shapes are compatible for broadcasting
   (void)shape();
 }
 
-ExpressionBase* BinaryExpr::lhs() const { return lhs_.get(); }
+ExpressionBase& BinaryExpr::lhs() const { return *child(0); }
 
-ExpressionBase* BinaryExpr::rhs() const { return rhs_.get(); }
+ExpressionBase& BinaryExpr::rhs() const { return *child(1); }
 
 BinaryOpType BinaryExpr::op() const { return op_; }
 
 std::string BinaryExpr::getName() const { return std::string(to_string(op_)); }
 
 std::string BinaryExpr::getAsString() const {
-  return getName() + "(" + lhs_->getAsString() + ", " + rhs_->getAsString() +
+  return getName() + "(" + lhs().getAsString() + ", " + rhs().getAsString() +
          ")";
 }
 
 DistributedShape BinaryExpr::shape() const {
-  auto maybeShape = DistributedShape::broadcast(lhs_->shape(), rhs_->shape());
+  auto maybeShape = DistributedShape::broadcast(lhs().shape(), rhs().shape());
   if (!maybeShape) {
     throw std::runtime_error("Shapes are not compatible for broadcasting");
   }
@@ -114,7 +140,9 @@ TileMapping BinaryExpr::tileMapping() const {
 }
 
 std::unique_ptr<ExpressionBase> BinaryExpr::clone() const {
-  return std::make_unique<BinaryExpr>(op_, lhs_->clone(), rhs_->clone());
+  return std::make_unique<BinaryExpr>(
+      op_, std::shared_ptr<ExpressionBase>(lhs().clone()),
+      std::shared_ptr<ExpressionBase>(rhs().clone()));
 }
 
 std::any BinaryExpr::accept(ExpressionVisitor& visitor, std::any arg) {
@@ -122,61 +150,66 @@ std::any BinaryExpr::accept(ExpressionVisitor& visitor, std::any arg) {
 }
 
 size_t BinaryExpr::hash() const {
-  return graphene::hash("binary", type(), op_, lhs_->hash(), rhs_->hash());
+  return graphene::hash("binary", type(), op_, lhs().hash(), rhs().hash());
 }
 
 //--------------------------------------------------------------------------
 // DotProductExpr implementation
 //--------------------------------------------------------------------------
-DotProductExpr::DotProductExpr(std::unique_ptr<ExpressionBase> lhs,
-                               std::unique_ptr<ExpressionBase> rhs)
-    : ExpressionBase(inferType(BinaryOpType::DOT_PRODUCT, lhs->type(), rhs->type())),
-      lhs_(std::move(lhs)),
-      rhs_(std::move(rhs)) {
+DotProductExpr::DotProductExpr(std::shared_ptr<ExpressionBase> lhs,
+                               std::shared_ptr<ExpressionBase> rhs)
+    : ExpressionBase(
+          inferType(BinaryOpType::DOT_PRODUCT, lhs->type(), rhs->type())) {
+  addChild(std::move(lhs));
+  addChild(std::move(rhs));
   // Validate that both operands are vector fields (rank 2, second dim > 1)
-  auto lhsShape = lhs_->shape();
-  auto rhsShape = rhs_->shape();
-  
+  auto lhsShape = this->lhs().shape();
+  auto rhsShape = this->rhs().shape();
+
   if (lhsShape.rank() != 2 || rhsShape.rank() != 2) {
-    throw std::runtime_error("Dot product requires rank 2 tensors (vector fields)");
+    throw std::runtime_error(
+        "Dot product requires rank 2 tensors (vector fields)");
   }
-  
+
   if (lhsShape.globalShape()[1] <= 1 || rhsShape.globalShape()[1] <= 1) {
-    throw std::runtime_error("Dot product requires second dimension > 1 for vector fields");
+    throw std::runtime_error(
+        "Dot product requires second dimension > 1 for vector fields");
   }
-  
+
   if (lhsShape.globalShape()[1] != rhsShape.globalShape()[1]) {
     throw std::runtime_error("Dot product requires vectors of the same length");
   }
-  
+
   // Check that shapes are compatible for broadcasting
   auto maybeShape = DistributedShape::broadcast(lhsShape, rhsShape);
   if (!maybeShape) {
-    throw std::runtime_error("Shapes are not compatible for broadcasting in dot product");
+    throw std::runtime_error(
+        "Shapes are not compatible for broadcasting in dot product");
   }
 }
 
-ExpressionBase* DotProductExpr::lhs() const { return lhs_.get(); }
+ExpressionBase& DotProductExpr::lhs() const { return *child(0); }
 
-ExpressionBase* DotProductExpr::rhs() const { return rhs_.get(); }
+ExpressionBase& DotProductExpr::rhs() const { return *child(1); }
 
 std::string DotProductExpr::getName() const { return "dot_product"; }
 
 std::string DotProductExpr::getAsString() const {
-  return getName() + "(" + lhs_->getAsString() + ", " + rhs_->getAsString() + ")";
+  return getName() + "(" + lhs().getAsString() + ", " + rhs().getAsString() +
+         ")";
 }
 
 DistributedShape DotProductExpr::shape() const {
   // Dot product: broadcast first, then reduce second dimension
-  auto lhsShape = lhs_->shape();
-  auto rhsShape = rhs_->shape();
-  
+  auto lhsShape = lhs().shape();
+  auto rhsShape = rhs().shape();
+
   auto broadcastShape = DistributedShape::broadcast(lhsShape, rhsShape).value();
-  
+
   // Reduce the vector dimension (second dim becomes 1)
   DistributedShape outputShape = broadcastShape;
   outputShape.globalShape()[1] = 1;
-  
+
   return outputShape;
 }
 
@@ -185,7 +218,9 @@ TileMapping DotProductExpr::tileMapping() const {
 }
 
 std::unique_ptr<ExpressionBase> DotProductExpr::clone() const {
-  return std::make_unique<DotProductExpr>(lhs_->clone(), rhs_->clone());
+  return std::make_unique<DotProductExpr>(
+      std::shared_ptr<ExpressionBase>(lhs().clone()),
+      std::shared_ptr<ExpressionBase>(rhs().clone()));
 }
 
 std::any DotProductExpr::accept(ExpressionVisitor& visitor, std::any arg) {
@@ -193,51 +228,57 @@ std::any DotProductExpr::accept(ExpressionVisitor& visitor, std::any arg) {
 }
 
 size_t DotProductExpr::hash() const {
-  return graphene::hash("dot_product", type(), lhs_->hash(), rhs_->hash());
+  return graphene::hash("dot_product", type(), lhs().hash(), rhs().hash());
 }
 
 //--------------------------------------------------------------------------
 // CrossProductExpr implementation
 //--------------------------------------------------------------------------
-CrossProductExpr::CrossProductExpr(std::unique_ptr<ExpressionBase> lhs,
-                                   std::unique_ptr<ExpressionBase> rhs)
-    : ExpressionBase(inferType(BinaryOpType::CROSS_PRODUCT, lhs->type(), rhs->type())),
-      lhs_(std::move(lhs)),
-      rhs_(std::move(rhs)) {
+CrossProductExpr::CrossProductExpr(std::shared_ptr<ExpressionBase> lhs,
+                                   std::shared_ptr<ExpressionBase> rhs)
+    : ExpressionBase(
+          inferType(BinaryOpType::CROSS_PRODUCT, lhs->type(), rhs->type())) {
+  addChild(std::move(lhs));
+  addChild(std::move(rhs));
   // Validate that both operands are 3D vector fields
-  auto lhsShape = lhs_->shape();
-  auto rhsShape = rhs_->shape();
-  
+  auto lhsShape = this->lhs().shape();
+  auto rhsShape = this->rhs().shape();
+
   if (lhsShape.rank() != 2 || rhsShape.rank() != 2) {
-    throw std::runtime_error("Cross product requires rank 2 tensors (vector fields)");
+    throw std::runtime_error(
+        "Cross product requires rank 2 tensors (vector fields)");
   }
-  
+
   if (lhsShape.globalShape()[1] != 3 || rhsShape.globalShape()[1] != 3) {
-    throw std::runtime_error("Cross product only works with 3D vectors (second dimension must be 3)");
+    throw std::runtime_error(
+        "Cross product only works with 3D vectors (second dimension must be "
+        "3)");
   }
-  
+
   // Check that shapes are compatible for broadcasting
   auto maybeShape = DistributedShape::broadcast(lhsShape, rhsShape);
   if (!maybeShape) {
-    throw std::runtime_error("Shapes are not compatible for broadcasting in cross product");
+    throw std::runtime_error(
+        "Shapes are not compatible for broadcasting in cross product");
   }
 }
 
-ExpressionBase* CrossProductExpr::lhs() const { return lhs_.get(); }
+ExpressionBase& CrossProductExpr::lhs() const { return *child(0); }
 
-ExpressionBase* CrossProductExpr::rhs() const { return rhs_.get(); }
+ExpressionBase& CrossProductExpr::rhs() const { return *child(1); }
 
 std::string CrossProductExpr::getName() const { return "cross_product"; }
 
 std::string CrossProductExpr::getAsString() const {
-  return getName() + "(" + lhs_->getAsString() + ", " + rhs_->getAsString() + ")";
+  return getName() + "(" + lhs().getAsString() + ", " + rhs().getAsString() +
+         ")";
 }
 
 DistributedShape CrossProductExpr::shape() const {
   // Cross product: broadcast the shapes, keep vector dimension as 3
-  auto lhsShape = lhs_->shape();
-  auto rhsShape = rhs_->shape();
-  
+  auto lhsShape = lhs().shape();
+  auto rhsShape = rhs().shape();
+
   return DistributedShape::broadcast(lhsShape, rhsShape).value();
 }
 
@@ -246,7 +287,9 @@ TileMapping CrossProductExpr::tileMapping() const {
 }
 
 std::unique_ptr<ExpressionBase> CrossProductExpr::clone() const {
-  return std::make_unique<CrossProductExpr>(lhs_->clone(), rhs_->clone());
+  return std::make_unique<CrossProductExpr>(
+      std::shared_ptr<ExpressionBase>(lhs().clone()),
+      std::shared_ptr<ExpressionBase>(rhs().clone()));
 }
 
 std::any CrossProductExpr::accept(ExpressionVisitor& visitor, std::any arg) {
@@ -254,7 +297,7 @@ std::any CrossProductExpr::accept(ExpressionVisitor& visitor, std::any arg) {
 }
 
 size_t CrossProductExpr::hash() const {
-  return graphene::hash("cross_product", type(), lhs_->hash(), rhs_->hash());
+  return graphene::hash("cross_product", type(), lhs().hash(), rhs().hash());
 }
 
 //--------------------------------------------------------------------------
@@ -299,22 +342,25 @@ size_t InputExpr::hash() const {
 //--------------------------------------------------------------------------
 // CastExpr implementation
 //--------------------------------------------------------------------------
-CastExpr::CastExpr(std::unique_ptr<ExpressionBase> arg, TypeRef type)
-    : ExpressionBase(type), arg_(std::move(arg)) {}
+CastExpr::CastExpr(std::shared_ptr<ExpressionBase> arg, TypeRef type)
+    : ExpressionBase(type) {
+  addChild(std::move(arg));
+}
 
-ExpressionBase* CastExpr::arg() const { return arg_.get(); }
+ExpressionBase& CastExpr::arg() const { return *child(0); }
 
 std::string CastExpr::getName() const { return "cast"; }
 
 std::string CastExpr::getAsString() const {
-  return "cast<" + type()->str() + ">(" + arg_->getAsString() + ")";
+  return "cast<" + type()->str() + ">(" + arg().getAsString() + ")";
 }
 
-DistributedShape CastExpr::shape() const { return arg_->shape(); }
-TileMapping CastExpr::tileMapping() const { return arg_->tileMapping(); }
+DistributedShape CastExpr::shape() const { return arg().shape(); }
+TileMapping CastExpr::tileMapping() const { return arg().tileMapping(); }
 
 std::unique_ptr<ExpressionBase> CastExpr::clone() const {
-  return std::make_unique<CastExpr>(arg_->clone(), type());
+  return std::make_unique<CastExpr>(
+      std::shared_ptr<ExpressionBase>(arg().clone()), type());
 }
 
 std::any CastExpr::accept(ExpressionVisitor& visitor, std::any arg) {
@@ -322,7 +368,7 @@ std::any CastExpr::accept(ExpressionVisitor& visitor, std::any arg) {
 }
 
 size_t CastExpr::hash() const {
-  return graphene::hash("cast", type(), arg_->hash());
+  return graphene::hash("cast", type(), arg().hash());
 }
 
 //--------------------------------------------------------------------------
@@ -444,12 +490,11 @@ INSTANTIATE(int64_t)
 //--------------------------------------------------------------------------
 // PermuteExpr implementation
 //--------------------------------------------------------------------------
-PermuteExpr::PermuteExpr(std::unique_ptr<ExpressionBase> arg,
+PermuteExpr::PermuteExpr(std::shared_ptr<ExpressionBase> arg,
                          std::vector<size_t> permutation)
-    : ExpressionBase(arg->type()),
-      arg_(std::move(arg)),
-      permutation_(std::move(permutation)) {
-  if (arg_->shape().rank() != permutation_.size()) {
+    : ExpressionBase(arg->type()), permutation_(std::move(permutation)) {
+  addChild(std::move(arg));
+  if (this->arg().shape().rank() != permutation_.size()) {
     throw std::runtime_error(
         "Permutation size must match the rank of the input");
   }
@@ -458,7 +503,7 @@ PermuteExpr::PermuteExpr(std::unique_ptr<ExpressionBase> arg,
   }
 }
 
-ExpressionBase* PermuteExpr::arg() const { return arg_.get(); }
+ExpressionBase& PermuteExpr::arg() const { return *child(0); }
 
 const std::vector<size_t>& PermuteExpr::permutation() const {
   return permutation_;
@@ -468,7 +513,7 @@ std::string PermuteExpr::getName() const { return "permute"; }
 
 std::string PermuteExpr::getAsString() const {
   std::stringstream ss;
-  ss << "permute(" << arg_->getAsString() << ", [";
+  ss << "permute(" << arg().getAsString() << ", [";
   for (size_t i = 0; i < permutation_.size(); ++i) {
     ss << permutation_[i];
     if (i < permutation_.size() - 1) {
@@ -480,7 +525,7 @@ std::string PermuteExpr::getAsString() const {
 }
 
 DistributedShape PermuteExpr::shape() const {
-  DistributedShape shape = arg_->shape();
+  DistributedShape shape = arg().shape();
   DistributedShape permutedShape = shape;
   // The first dimension is always the same
   for (size_t i = 1; i < shape.rank(); ++i) {
@@ -489,10 +534,11 @@ DistributedShape PermuteExpr::shape() const {
   return permutedShape;
 }
 
-TileMapping PermuteExpr::tileMapping() const { return arg_->tileMapping(); }
+TileMapping PermuteExpr::tileMapping() const { return arg().tileMapping(); }
 
 std::unique_ptr<ExpressionBase> PermuteExpr::clone() const {
-  return std::make_unique<PermuteExpr>(arg_->clone(), permutation_);
+  return std::make_unique<PermuteExpr>(
+      std::shared_ptr<ExpressionBase>(arg().clone()), permutation_);
 }
 
 std::any PermuteExpr::accept(ExpressionVisitor& visitor, std::any arg) {
@@ -500,30 +546,31 @@ std::any PermuteExpr::accept(ExpressionVisitor& visitor, std::any arg) {
 }
 
 size_t PermuteExpr::hash() const {
-  return graphene::hash("permute", permutation_, arg_->hash());
+  return graphene::hash("permute", permutation_, arg().hash());
 }
 
 // -----------------------------------------------------------------------
 // BroadcastExpr implementation
 // -----------------------------------------------------------------------
-BroadcastExpr::BroadcastExpr(std::unique_ptr<ExpressionBase> arg,
+BroadcastExpr::BroadcastExpr(std::shared_ptr<ExpressionBase> arg,
                              DistributedShape shape)
-    : ExpressionBase(arg->type()), arg_(std::move(arg)), shape_(shape) {
-  if (arg_->shape().rank() > shape_.rank()) {
+    : ExpressionBase(arg->type()), shape_(shape) {
+  addChild(std::move(arg));
+  if (this->arg().shape().rank() > shape_.rank()) {
     throw std::runtime_error("Broadcasting to a smaller rank is not allowed");
   }
-  if (!DistributedShape::broadcast(arg_->shape(), shape_)) {
+  if (!DistributedShape::broadcast(this->arg().shape(), shape_)) {
     throw std::runtime_error("Shapes are not compatible for broadcasting");
   }
 }
 
-ExpressionBase* BroadcastExpr::arg() const { return arg_.get(); }
+ExpressionBase& BroadcastExpr::arg() const { return *child(0); }
 
 std::string BroadcastExpr::getName() const { return "broadcast"; }
 
 std::string BroadcastExpr::getAsString() const {
   std::stringstream ss;
-  ss << "broadcast(" << arg_->getAsString() << ", [";
+  ss << "broadcast(" << arg().getAsString() << ", [";
   for (size_t i = 0; i < shape_.rank(); ++i) {
     ss << shape_[i];
     if (i < shape_.rank() - 1) {
@@ -541,7 +588,8 @@ TileMapping BroadcastExpr::tileMapping() const {
 }
 
 std::unique_ptr<ExpressionBase> BroadcastExpr::clone() const {
-  return std::make_unique<BroadcastExpr>(arg_->clone(), shape_);
+  return std::make_unique<BroadcastExpr>(
+      std::shared_ptr<ExpressionBase>(arg().clone()), shape_);
 }
 
 std::any BroadcastExpr::accept(ExpressionVisitor& visitor, std::any arg) {
@@ -549,43 +597,43 @@ std::any BroadcastExpr::accept(ExpressionVisitor& visitor, std::any arg) {
 }
 
 size_t BroadcastExpr::hash() const {
-  return graphene::hash("broadcast", shape_, arg_->hash());
+  return graphene::hash("broadcast", shape_, arg().hash());
 }
 
 //--------------------------------------------------------------------------
 // ExpressionVisitor implementation
 //--------------------------------------------------------------------------
 std::any ExpressionVisitor::visit(UnaryExpr& expr, std::any arg) {
-  expr.arg()->accept(*this, arg);
+  expr.arg().accept(*this, arg);
   return {};
 }
 std::any ExpressionVisitor::visit(BinaryExpr& expr, std::any arg) {
-  expr.lhs()->accept(*this, arg);
-  expr.rhs()->accept(*this, arg);
+  expr.lhs().accept(*this, arg);
+  expr.rhs().accept(*this, arg);
   return {};
 }
 std::any ExpressionVisitor::visit(DotProductExpr& expr, std::any arg) {
-  expr.lhs()->accept(*this, arg);
-  expr.rhs()->accept(*this, arg);
+  expr.lhs().accept(*this, arg);
+  expr.rhs().accept(*this, arg);
   return {};
 }
 std::any ExpressionVisitor::visit(CrossProductExpr& expr, std::any arg) {
-  expr.lhs()->accept(*this, arg);
-  expr.rhs()->accept(*this, arg);
+  expr.lhs().accept(*this, arg);
+  expr.rhs().accept(*this, arg);
   return {};
 }
 std::any ExpressionVisitor::visit(InputExpr& expr, std::any arg) { return {}; }
 std::any ExpressionVisitor::visit(CastExpr& expr, std::any arg) {
-  expr.arg()->accept(*this, arg);
+  expr.arg().accept(*this, arg);
   return {};
 }
 std::any ExpressionVisitor::visit(ConstExpr& expr, std::any arg) { return {}; }
 std::any ExpressionVisitor::visit(PermuteExpr& expr, std::any arg) {
-  expr.arg()->accept(*this, arg);
+  expr.arg().accept(*this, arg);
   return {};
 }
 std::any ExpressionVisitor::visit(BroadcastExpr& expr, std::any arg) {
-  expr.arg()->accept(*this, arg);
+  expr.arg().accept(*this, arg);
   return {};
 }
 }  // namespace graphene::detail

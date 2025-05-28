@@ -58,6 +58,7 @@ struct ExpressionVisitor {
 
 class ExpressionBase {
   TypeRef type_;
+  std::vector<std::shared_ptr<ExpressionBase>> children_;
 
  public:
   ExpressionBase() = delete;
@@ -65,6 +66,11 @@ class ExpressionBase {
   virtual ~ExpressionBase() = default;
 
   TypeRef type() const;
+
+  const std::vector<std::shared_ptr<ExpressionBase>>& children() const;
+  std::shared_ptr<ExpressionBase> child(size_t index) const;
+  size_t numChildren() const;
+  void replaceChild(size_t index, std::shared_ptr<ExpressionBase> child);
 
   virtual std::string getName() const = 0;
   virtual std::string getAsString() const = 0;
@@ -75,18 +81,20 @@ class ExpressionBase {
   virtual std::unique_ptr<ExpressionBase> clone() const = 0;
 
   virtual std::any accept(ExpressionVisitor& visitor, std::any arg = {}) = 0;
+
+ protected:
+  void addChild(std::shared_ptr<ExpressionBase> child);
 };
 
 class UnaryExpr : public ExpressionBase {
-  std::unique_ptr<ExpressionBase> arg_;
   UnaryOpType op_;
 
  public:
   UnaryExpr() = delete;
-  UnaryExpr(UnaryOpType op, std::unique_ptr<ExpressionBase> arg);
+  UnaryExpr(UnaryOpType op, std::shared_ptr<ExpressionBase> arg);
   ~UnaryExpr() override = default;
 
-  ExpressionBase* arg() const;
+  ExpressionBase& arg() const;
   UnaryOpType op() const;
 
   std::string getName() const override;
@@ -101,18 +109,16 @@ class UnaryExpr : public ExpressionBase {
 };
 
 class BinaryExpr : public ExpressionBase {
-  std::unique_ptr<ExpressionBase> lhs_;
-  std::unique_ptr<ExpressionBase> rhs_;
   BinaryOpType op_;
 
  public:
   BinaryExpr() = delete;
-  BinaryExpr(BinaryOpType op, std::unique_ptr<ExpressionBase> lhs,
-             std::unique_ptr<ExpressionBase> rhs);
+  BinaryExpr(BinaryOpType op, std::shared_ptr<ExpressionBase> lhs,
+             std::shared_ptr<ExpressionBase> rhs);
   ~BinaryExpr() override = default;
 
-  ExpressionBase* lhs() const;
-  ExpressionBase* rhs() const;
+  ExpressionBase& lhs() const;
+  ExpressionBase& rhs() const;
   BinaryOpType op() const;
 
   std::string getName() const override;
@@ -127,17 +133,14 @@ class BinaryExpr : public ExpressionBase {
 };
 
 class DotProductExpr : public ExpressionBase {
-  std::unique_ptr<ExpressionBase> lhs_;
-  std::unique_ptr<ExpressionBase> rhs_;
-
  public:
   DotProductExpr() = delete;
-  DotProductExpr(std::unique_ptr<ExpressionBase> lhs,
-                 std::unique_ptr<ExpressionBase> rhs);
+  DotProductExpr(std::shared_ptr<ExpressionBase> lhs,
+                 std::shared_ptr<ExpressionBase> rhs);
   ~DotProductExpr() override = default;
 
-  ExpressionBase* lhs() const;
-  ExpressionBase* rhs() const;
+  ExpressionBase& lhs() const;
+  ExpressionBase& rhs() const;
 
   std::string getName() const override;
   std::string getAsString() const override;
@@ -151,17 +154,14 @@ class DotProductExpr : public ExpressionBase {
 };
 
 class CrossProductExpr : public ExpressionBase {
-  std::unique_ptr<ExpressionBase> lhs_;
-  std::unique_ptr<ExpressionBase> rhs_;
-
  public:
   CrossProductExpr() = delete;
-  CrossProductExpr(std::unique_ptr<ExpressionBase> lhs,
-                   std::unique_ptr<ExpressionBase> rhs);
+  CrossProductExpr(std::shared_ptr<ExpressionBase> lhs,
+                   std::shared_ptr<ExpressionBase> rhs);
   ~CrossProductExpr() override = default;
 
-  ExpressionBase* lhs() const;
-  ExpressionBase* rhs() const;
+  ExpressionBase& lhs() const;
+  ExpressionBase& rhs() const;
 
   std::string getName() const override;
   std::string getAsString() const override;
@@ -198,14 +198,12 @@ class InputExpr : public ExpressionBase {
 };
 
 class CastExpr : public ExpressionBase {
-  std::unique_ptr<ExpressionBase> arg_;
-
  public:
   CastExpr() = delete;
-  CastExpr(std::unique_ptr<ExpressionBase> arg, TypeRef type);
+  CastExpr(std::shared_ptr<ExpressionBase> arg, TypeRef type);
   ~CastExpr() override = default;
 
-  ExpressionBase* arg() const;
+  ExpressionBase& arg() const;
 
   std::string getName() const override;
   std::string getAsString() const override;
@@ -253,16 +251,15 @@ class ConstExpr : public ExpressionBase {
 };
 
 class PermuteExpr : public ExpressionBase {
-  std::unique_ptr<ExpressionBase> arg_;
   std::vector<size_t> permutation_;
 
  public:
   PermuteExpr() = delete;
-  PermuteExpr(std::unique_ptr<ExpressionBase> arg,
+  PermuteExpr(std::shared_ptr<ExpressionBase> arg,
               std::vector<size_t> permutation);
   ~PermuteExpr() override = default;
 
-  ExpressionBase* arg() const;
+  ExpressionBase& arg() const;
   const std::vector<size_t>& permutation() const;
 
   std::string getName() const override;
@@ -277,15 +274,14 @@ class PermuteExpr : public ExpressionBase {
 };
 
 class BroadcastExpr : public ExpressionBase {
-  std::unique_ptr<ExpressionBase> arg_;
   DistributedShape shape_;
 
  public:
   BroadcastExpr() = delete;
-  BroadcastExpr(std::unique_ptr<ExpressionBase> arg, DistributedShape shape);
+  BroadcastExpr(std::shared_ptr<ExpressionBase> arg, DistributedShape shape);
   ~BroadcastExpr() override = default;
 
-  ExpressionBase* arg() const;
+  ExpressionBase& arg() const;
 
   std::string getName() const override;
   std::string getAsString() const override;

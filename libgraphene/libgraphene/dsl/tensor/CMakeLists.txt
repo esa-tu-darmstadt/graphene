@@ -5,6 +5,8 @@ add_library(GrapheneTensorDSL "RemoteTensor.cpp"
     "HostTensor.cpp" 
     "ControlFlow.cpp" 
     "details/Expressions.cpp"
+    "optimization/ExpressionOptimizer.cpp"
+    "optimization/InputExprDeduplication.cpp"
 )
 target_link_libraries(GrapheneTensorDSL PUBLIC GrapheneCommon GrapheneUtil GrapheneCodeDSL popops)
 
