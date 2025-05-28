@@ -18,6 +18,10 @@
 
 #include "libgraphene/dsl/code/Execute.hpp"
 
+#include <cstring>
+#include <poplar/Target.hpp>
+#include <poplar/TargetType.hpp>
+
 #include "libgraphene/common/TileMapping.hpp"
 #include "libgraphene/dsl/code/ControlFlow.hpp"
 #include "libgraphene/dsl/code/Function.hpp"
@@ -29,10 +33,32 @@
 
 using namespace graphene;
 
+namespace {
+std::string getCompileTargetName() {
+  TargetType targetType = Runtime::instance().getTargetType();
+  switch (targetType) {
+    case TargetType::CPU:
+      return "cpu";
+    case TargetType::IPU1:
+      return "ipu1";
+    case TargetType::IPU2:
+      return "ipu2";
+    case TargetType::IPU21:
+      return "ipu21";
+    default:
+      throw std::runtime_error("Unknown target type");
+  }
+}
+}  // namespace
+
 void graphene::codedsl::ExecuteAsMapped(
     std::vector<Vertex::MemberVarInfo> vars, VertexKind kind,
     std::function<void(std::vector<Value>)> code, bool broadcastTensors,
-    size_t targetTile) {
+    size_t targetTile, bool ipuOnly) {
+  if (ipuOnly && Runtime::instance().getTargetType() == TargetType::CPU) {
+    throw std::runtime_error("Trying to execute IPU-only code on CPU");
+  }
+
   auto transformedCode = [&](std::vector<Value> memberVars) -> Function {
     if (kind == VertexKind::MultiVertex)
       return Function("compute", Type::BOOL, {Type::UINT32}, ThreadKind::Worker,
@@ -64,14 +90,25 @@ void graphene::codedsl::ExecuteAsMapped(
   };
 
   // Emit the necessary includes
-  CodeGen::emitInclude("ipu_intrinsics", true);
+  CodeGen::emitInclude("ipu_intrinsics", true, true);
   CodeGen::emitInclude("poplar/Vertex.hpp", true);
   CodeGen::emitInclude("array", true);
   CodeGen::emitInclude("libtwofloat/arithmetics/double-word-arithmetic.hpp",
                        false);
   CodeGen::emitInclude("libtwofloat/operators.hpp", false);
-  CodeGen::emitInclude("ipu-thread-sync/ipu-thread-sync.hpp", false);
+  CodeGen::emitInclude("ipu-thread-sync/ipu-thread-sync.hpp", false, true);
   CodeGen::emitInclude("print.h", true);
+
+  // Emit definitions for worker and supervisor function attributes. They are
+  // only supported on IPU targets!
+  CodeGen::emitCode("#ifdef __IPU__\n");
+  CodeGen::emitCode("#define WORKERFUNC __attribute__((target(\"worker\")))\n");
+  CodeGen::emitCode(
+      "#define SUPERVISORFUNC __attribute__((target(\"supervisor\")))\n");
+  CodeGen::emitCode("#else\n");
+  CodeGen::emitCode("#define WORKERFUNC\n");
+  CodeGen::emitCode("#define SUPERVISORFUNC\n");
+  CodeGen::emitCode("#endif // __IPU__\n");
 
   // Generate the vertex with a placeholder name. This enables us to generate a
   // hash of the code, independent of the vertex name. The actual vertex name
@@ -105,7 +142,7 @@ void graphene::codedsl::ExecuteAsMapped(
     // Compile the vertex
     std::filesystem::path objectFilePath =
         VertexCache::getVertexObjectPath(hash);
-    std::string baseCmd = "popc -O3 --target=ipu2 " + srcPath.string();
+    std::string baseCmd = "popc -O3 " + srcPath.string();
     baseCmd +=
         " -I" + Runtime::instance()
                     .getRuntimeLibIncludeDir(Runtime::RuntimeLib::TwoFloat)
@@ -118,11 +155,15 @@ void graphene::codedsl::ExecuteAsMapped(
     // double-word arithmetics completely..
     // baseCmd += " -X -ffast-math";
 
-    std::string elfCmd = baseCmd + " -o " + objectFilePath.string();
-    std::string asmCmd =
-        baseCmd + " -S -o " + srcPath.replace_extension(".S").string();
+    std::string targetString = "ipu2,ipu21";
+    if (!ipuOnly) targetString += ",cpu";
+
+    std::string elfCmd = baseCmd + " --target=" + targetString + " -o " +
+                         objectFilePath.string();
+    std::string asmCmd = baseCmd + " --target=ipu21 -S -o " +
+                         srcPath.replace_extension(".S").string();
     spdlog::trace("Compiling vertex with command: {}", elfCmd);
-    std::string irCmd = baseCmd + " --emit-llvm -o " +
+    std::string irCmd = baseCmd + " --emit-llvm --target=ipu21 -o " +
                         srcPath.replace_extension(".ll").string();
     if (std::system(elfCmd.c_str()) != 0) {
       throw std::runtime_error("Failed to compile vertex");
@@ -185,6 +226,7 @@ void graphene::codedsl::ExecuteAsMapped(
 
     poplar::VertexRef v = graph.addVertex(exec.computeSet(), vertexName);
     graph.setTileMapping(v, tile);
+    graph.setPerfEstimate(v, 10000);  // FIXME: Set a reasonable estimate
 
     size_t longestRank =
         std::max_element(tensors.begin(), tensors.end(),

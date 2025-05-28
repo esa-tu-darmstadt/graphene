@@ -55,7 +55,7 @@ HostTensor createHostTensor(DistributedShape shape, TypeRef type,
   }
 
 TEST_F(TensorTest, RemoteCopy) {
-  Runtime runtime(1);
+  Runtime runtime(1, true);
   bool callbackCalled = false;
   // create a 8x2xfloat tensor mapped to 4 tiles
   HostTensor host1 = createHostTensor<float>(
@@ -76,7 +76,7 @@ TEST_F(TensorTest, RemoteCopy) {
 }
 
 TEST_F(TensorTest, Print) {
-  Runtime runtime(1);
+  Runtime runtime(1, true);
   std::stringstream ss1;
   std::stringstream ss2;
   std::stringstream ss3;
@@ -92,10 +92,10 @@ TEST_F(TensorTest, Print) {
   tensor1.print("tensor", PrintTensorFormat(8), ss1);
   tensor1.print(
       "tensor",
-      PrintTensorFormat(5, 0, PrintTensorFormat::FloatFormat::Auto, 2), ss2);
+      PrintTensorFormat(5, 0, PrintTensorFormat::FloatFormat::Fixed, 2), ss2);
   tensor2.print(
       "tensor",
-      PrintTensorFormat(2, 0, PrintTensorFormat::FloatFormat::Auto, 1), ss3);
+      PrintTensorFormat(2, 0, PrintTensorFormat::FloatFormat::Fixed, 1), ss3);
 
   std::string expected1 = R"(tensor<8x2xfloat> tensor = [
   [0, 1]
@@ -134,7 +134,7 @@ TEST_F(TensorTest, Print) {
 }
 
 TEST_F(TensorTest, ReduceAcrossTilesSingleIPU) {
-  Runtime runtime(1);
+  Runtime runtime(1, true);
   bool callbackCalled = false;
   // create a 8x2xfloat tensor mapped to 4 tiles
   HostTensor host1 = createHostTensor<float>(
@@ -160,7 +160,7 @@ TEST_F(TensorTest, ReduceAcrossTilesSingleIPU) {
 }
 
 TEST_F(TensorTest, ReduceAcrossTilesMultipleIPUs) {
-  Runtime runtime(2);
+  Runtime runtime(2, true);
   bool callbackCalled = false;
   // create a 8x2xfloat tensor mapped to 4 tiles across 2 IPUs
   HostTensor host1 = createHostTensor<float>(
@@ -188,7 +188,7 @@ TEST_F(TensorTest, ReduceAcrossTilesMultipleIPUs) {
 }
 
 TEST_F(TensorTest, ReduceSameTiles) {
-  Runtime runtime(1);
+  Runtime runtime(1, true);
   bool callbackCalled = false;
   // create a 8x8xfloat tensor mapped to 4 tiles
   HostTensor host1 = createHostTensor<float>(
@@ -223,7 +223,7 @@ TEST_F(TensorTest, ReduceSameTiles) {
 }
 
 TEST_F(TensorTest, DotProductSameShape) {
-  Runtime runtime(1);
+  Runtime runtime(1, true);
   bool callbackCalled = false;
 
   // Create 2x3 vector fields (2 vectors with 3 components each)
@@ -262,7 +262,7 @@ TEST_F(TensorTest, DotProductSameShape) {
 }
 
 TEST_F(TensorTest, CrossProductSameShape) {
-  Runtime runtime(1);
+  Runtime runtime(1, true);
   bool callbackCalled = false;
 
   // Create 2x3 vector fields (2 3D vectors)
@@ -305,7 +305,7 @@ TEST_F(TensorTest, CrossProductSameShape) {
 }
 
 TEST_F(TensorTest, AdditionSameShape) {
-  Runtime runtime(1);
+  Runtime runtime(1, true);
   bool callbackCalled = false;
 
   // Create 2x3 tensors for addition
@@ -347,7 +347,7 @@ TEST_F(TensorTest, AdditionSameShape) {
 }
 
 TEST_F(TensorTest, AdditionWithBroadcasting) {
-  Runtime runtime(1);
+  Runtime runtime(1, true);
   bool callbackCalled = false;
 
   // Create 1x3 tensor (for broadcasting) and 2x3 tensor
@@ -391,7 +391,7 @@ TEST_F(TensorTest, AdditionWithBroadcasting) {
 }
 
 TEST_F(TensorTest, AdditionAndSubtraction) {
-  Runtime runtime(1);
+  Runtime runtime(1, true);
   bool callbackCalled = false;
 
   // Create 2x3 tensors for complex expression
@@ -439,7 +439,7 @@ TEST_F(TensorTest, AdditionAndSubtraction) {
 }
 
 TEST_F(TensorTest, CrossAndDotProductSameShape) {
-  Runtime runtime(1);
+  Runtime runtime(1, true);
   bool callbackCalled = false;
 
   // Create 2x3 vector fields (2 3D vectors)

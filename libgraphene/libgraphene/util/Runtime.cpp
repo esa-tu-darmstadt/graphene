@@ -39,6 +39,7 @@
 #include "libgraphene/util/VertexCache.hpp"
 #include "poplar/DeviceManager.hpp"
 #include "poplar/Graph.hpp"
+#include "poplar/IPUModel.hpp"
 #include "poplar/Program.hpp"
 #include "poplar/StreamCallback.hpp"
 
@@ -63,11 +64,21 @@ std::filesystem::path findRuntimeLib(std::string defaultPath,
   }
   return runtimeLibPath;
 }
+
+std::string getCompileTargetName() {
+  const poplar::Target &target = Context::graph().getTarget();
+  if (target.getTargetType() != poplar::TargetType::IPU)
+    return "cpu";
+  else
+    return target.getTargetArchString();
+}
+
 }  // namespace
 
 Runtime *Runtime::instance_ = nullptr;
 
-Runtime::Runtime(size_t numIPUs, std::filesystem::path expressionStorageDir)
+Runtime::Runtime(size_t numIPUs, bool emulate,
+                 std::filesystem::path expressionStorageDir)
     : expressionStorageDir_(expressionStorageDir) {
   assert(instance_ == nullptr && "Runtime already registered");
   instance_ = this;
@@ -102,8 +113,8 @@ Runtime::Runtime(size_t numIPUs, std::filesystem::path expressionStorageDir)
   // if (getenv("EXPRESSION_DUMP_ASM") != nullptr) dumpExpressionAsm_ = true;
   if (getenv("EXPRESSION_DUMP_IR") != nullptr) dumpExpressionIR_ = true;
 
+  init(numIPUs, emulate);
   VertexCache::initCache(expressionStorageDir_);
-  init(numIPUs);
 }
 Runtime::~Runtime() { instance_ = nullptr; }
 
@@ -201,34 +212,53 @@ void Runtime::enableProfiling(std::filesystem::path directory,
   }
 }
 
-void Runtime::init(size_t numIPUs) {
+void Runtime::init(size_t numIPUs, bool emulate) {
   GRAPHENE_TRACEPOINT();
+  const poplar::Target *target;
 
-  // The DeviceManager is used to discover IPU devices
-  auto manager = poplar::DeviceManager::createDeviceManager();
+  if (emulate) {
+    poplar::IPUModel ipuModel("ipu2");
+    ipuModel.numIPUs = numIPUs;
+    device_ = std::move(ipuModel.createDevice({}));
+    spdlog::info("Using IPU model for emulation");
+    target = &device_.getTarget();
+    targetType_ = TargetType::CPU;
+  } else {
+    // The DeviceManager is used to discover IPU devices
+    auto manager = poplar::DeviceManager::createDeviceManager();
 
-  // Attempt to attach to the requested number of IPUs
-  auto devices = manager.getDevices(poplar::TargetType::IPU, numIPUs);
-  spdlog::info("Trying to attach to {} IPU(s)", numIPUs);
-  auto it =
-      std::find_if(devices.begin(), devices.end(),
-                   [](poplar::Device &device) { return device.attach(); });
+    // Attempt to attach to the requested number of IPUs
+    auto devices = manager.getDevices(poplar::TargetType::IPU, numIPUs);
+    spdlog::info("Trying to attach to {} IPU(s)", numIPUs);
+    auto it =
+        std::find_if(devices.begin(), devices.end(),
+                     [](poplar::Device &device) { return device.attach(); });
 
-  if (it == devices.end()) {
-    spdlog::error("Error attaching to IPU");
-    std::exit(1);
+    if (it == devices.end()) {
+      spdlog::error("Error attaching to IPU");
+      std::exit(1);
+    }
+
+    device_ = std::move(*it);
+    spdlog::info("Attached to IPU {}", device_.getId());
+
+    // Create the expression storage directory if it does not exist
+    if (!std::filesystem::exists(expressionStorageDir_))
+      std::filesystem::create_directories(expressionStorageDir_);
+
+    target = &device_.getTarget();
+    if (target->getTargetArchString() == "ipu1") {
+      targetType_ = TargetType::IPU1;
+    } else if (target->getTargetArchString() == "ipu2") {
+      targetType_ = TargetType::IPU2;
+    } else if (target->getTargetArchString() == "ipu21") {
+      targetType_ = TargetType::IPU21;
+    } else {
+      throw std::runtime_error("Unsupported IPU architecture: " +
+                               target->getTargetArchString());
+    }
   }
-
-  device_ = std::move(*it);
-  spdlog::info("Attached to IPU {}", device_.getId());
-
-  // Create the expression storage directory if it does not exist
-  if (!std::filesystem::exists(expressionStorageDir_))
-    std::filesystem::create_directories(expressionStorageDir_);
-
-  // Target target = Target::createIPUTarget("IPU-POD16-DA");
-  poplar::Target target = device_.getTarget();
-  this->graph_ = poplar::Graph(target);
+  this->graph_ = poplar::Graph(*target);
   this->preludeProgram_ = poplar::program::Sequence();
   this->mainProgram_ = poplar::program::Sequence();
 
@@ -236,6 +266,9 @@ void Runtime::init(size_t numIPUs) {
 
   Context::setPreludeProgram(preludeProgram_);
   graphene::addCodelets(graph_, preludeProgram_);
+
+  spdlog::info("Graphene runtime initialized with target: {}",
+               getCompileTargetName());
 }
 
 void Runtime::loadAndRunEngine(poplar::Engine &engine) {

@@ -150,8 +150,9 @@ Tensor::Tensor(std::initializer_list<Type> values,
   if (!tileMapping.isCompatibleWithShape(*shape))
     throw std::invalid_argument("Tile mapping is not compatible with shape");
 
-  poplar::Tensor constant = graph.addConstant(
-      Traits<Type>::PoplarType, this->tensor().shape(), hostValueArrayRef);
+  poplar::Tensor constant =
+      graph.addConstant(getType<Type>()->poplarEquivalentType()->poplarType(),
+                        this->tensor().shape(), hostValueArrayRef);
 
   graph.setTileMapping(constant, tileMapping.toPoplar());
   graph.setTileMapping(this->tensor(), tileMapping.toPoplar());
@@ -409,8 +410,10 @@ void Tensor::copyToRemote(RemoteTensor &existingRemoteTensor) const {
     size_t numElements = ipuMapping.numElementsOnTile(ipu);
     if (numElements == 0) continue;
 
-    if (existingRemoteTensor.buffers_.find(ipu) == existingRemoteTensor.buffers_.end()) {
-      throw std::invalid_argument("RemoteTensor missing buffer for IPU " + std::to_string(ipu));
+    if (existingRemoteTensor.buffers_.find(ipu) ==
+        existingRemoteTensor.buffers_.end()) {
+      throw std::invalid_argument("RemoteTensor missing buffer for IPU " +
+                                  std::to_string(ipu));
     }
 
     poplar::RemoteBuffer buffer = existingRemoteTensor.buffers_.at(ipu);

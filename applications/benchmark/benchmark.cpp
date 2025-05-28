@@ -78,6 +78,7 @@ int main(int argc, char** argv) {
     std::string matrixPath;
     std::string poissonConfig;
     std::string profileDirectory;
+    bool emulate = false;
   } cliConfig;
 
   // Add command line arguments
@@ -88,6 +89,9 @@ int main(int argc, char** argv) {
 
   app.add_option("-t,--tiles", cliConfig.numTiles, "Number of tiles")
       ->required();
+
+  app.add_option("-e,--emulate", cliConfig.emulate,
+                 "Emulate on CPU instead of running on IPUs (default: false)");
 
   // Either a matrix file or a poisson matrix config must be provided
   auto matrixGroup = app.add_option_group("Matrix source");
@@ -132,7 +136,7 @@ int main(int argc, char** argv) {
   }
 
   // Initialize runtime
-  Runtime runtime(numIPUs);
+  Runtime runtime(numIPUs, cliConfig.emulate);
 
   spdlog::info("Building data flow graph");
 

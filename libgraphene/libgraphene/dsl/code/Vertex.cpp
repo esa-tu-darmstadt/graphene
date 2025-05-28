@@ -18,6 +18,8 @@
 
 #include "libgraphene/dsl/code/Vertex.hpp"
 
+#include <filesystem>
+
 #include "libgraphene/dsl/code/CodeGen.hpp"
 
 using namespace graphene::codedsl;
@@ -56,6 +58,16 @@ Vertex::Vertex(
       if (elementType != elementType->poplarEquivalentType()) {
         // Cast the vector type to the actual element type
         auto* convertedVectorType = VertexVectorType::get(elementType);
+        auto* convertedFieldType =
+            VertexInOutType::get(tensorInfo.direction, convertedVectorType);
+        convertedFields_.push_back(
+            fields_[i].reinterpretCast(convertedFieldType));
+      } else if (elementType == Type::BOOL &&
+                 tensorInfo.direction != VertexInOutType::Input) {
+        // Poplar has a bug when storing to bool vectors. We work around this by
+        // casting bool vectors to uint8_t vectors. This is fine as bool is
+        // equivalent to char in C++.
+        auto* convertedVectorType = VertexVectorType::get(Type::UINT8);
         auto* convertedFieldType =
             VertexInOutType::get(tensorInfo.direction, convertedVectorType);
         convertedFields_.push_back(

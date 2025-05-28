@@ -63,9 +63,12 @@ class CodeGen {
     emitCode(code);
     emitEndStatement();
   }
-  static void emitInclude(std::string path, bool system = false) {
+  static void emitInclude(std::string path, bool system = false,
+                          bool ipuOnly = false) {
+    if (ipuOnly) stream() << "#ifdef __IPU__\n";
     stream() << "#include " << (system ? "<" : "\"") << path
              << (system ? ">\n" : "\"\n");
+    if (ipuOnly) stream() << "#endif // __IPU__\n";
   }
   static void emitEndStatement() { stream() << ";\n"; }
 

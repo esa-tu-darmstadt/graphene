@@ -60,47 +60,51 @@ inline codedsl::Vertex::MemberVarInfo Member(TypeRef type,
 
 /// Executes code on one worker thread per tile for every tile that contains
 /// mapped tensor data. Generates a `Vertex`.
-template <bool broadcastTensors = false, typename F, typename... MemberVars>
+template <bool broadcastTensors = false, bool ipuOnly = false, typename F,
+          typename... MemberVars>
   requires(std::is_same_v<std::decay_t<MemberVars>,
                           codedsl::Vertex::MemberVarInfo> &&
            ...)
 void Execute(F&& code, MemberVars&&... vars) {
   codedsl::ExecuteAsMapped({vars...}, codedsl::VertexKind::Vertex,
-                           std::forward<F>(code), broadcastTensors);
+                           std::forward<F>(code), broadcastTensors, 0, ipuOnly);
 }
 
 /// Executes code on a single worker thread on the given tile. Generates a
 /// `Vertex`.
-template <bool broadcastTensors = false, typename F, typename... MemberVars>
+template <bool broadcastTensors = false, bool ipuOnly = false, typename F,
+          typename... MemberVars>
   requires(std::is_same_v<std::decay_t<MemberVars>,
                           codedsl::Vertex::MemberVarInfo> &&
            ...)
 void ExecuteOnSingleTile(F&& code, size_t tile, MemberVars&&... vars) {
   codedsl::ExecuteAsMapped({vars...}, codedsl::VertexKind::Vertex,
-                           std::forward<F>(code), broadcastTensors);
+                           std::forward<F>(code), broadcastTensors, 0, ipuOnly);
 }
 
 /// Execute the code on all worker threads. The first
 /// argument of the code function will be the worker ID. Generates a
 /// `MultiVertex`
-template <bool broadcastTensors = false, typename F, typename... MemberVars>
+template <bool broadcastTensors = false, bool ipuOnly = false, typename F,
+          typename... MemberVars>
   requires(std::is_same_v<std::decay_t<MemberVars>,
                           codedsl::Vertex::MemberVarInfo> &&
            ...)
 void ExecuteThreaded(F&& code, MemberVars&&... vars) {
   codedsl::ExecuteAsMapped({vars...}, codedsl::VertexKind::MultiVertex,
-                           std::forward<F>(code), broadcastTensors);
+                           std::forward<F>(code), broadcastTensors, 0, ipuOnly);
 }
 
 /// Executes the given code on a supervisor thread. Generates a
 /// `SupervisorVertex`.
-template <bool broadcastTensors = false, typename F, typename... MemberVars>
+template <bool broadcastTensors = false, bool ipuOnly = false, typename F,
+          typename... MemberVars>
   requires(std::is_same_v<std::decay_t<MemberVars>,
                           codedsl::Vertex::MemberVarInfo> &&
            ...)
 void ExecuteOnSupervisor(F&& code, MemberVars&&... vars) {
   codedsl::ExecuteAsMapped({vars...}, codedsl::VertexKind::SupervisorVertex,
-                           std::forward<F>(code), broadcastTensors);
+                           std::forward<F>(code), broadcastTensors, 0, ipuOnly);
 }
 
 }  // namespace graphene

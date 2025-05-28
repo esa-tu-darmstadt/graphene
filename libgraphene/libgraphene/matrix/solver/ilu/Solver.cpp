@@ -219,7 +219,7 @@ void Solver::factorizeCRS() {
 
   if (factorizeMulticolor_) {
     spdlog::trace("Using multicolor {} factorization", name());
-    ExecuteOnSupervisor(
+    ExecuteOnSupervisor<false, true>(
         [&](Value diagCoeffs, Value offDiagCoeffs, Value rowPtr, Value colInd,
             Value colorSortAddr, Value colorSortStartPtr, Value currentColor,
             Value nRowsWithoutHalo) {
@@ -445,7 +445,7 @@ void Solver::solveCRS(Tensor& x, Tensor& b) {
     using namespace codedsl;
     // Multicolor parallel substitution
     spdlog::trace("Using multicolor {} substitution", name());
-    ExecuteOnSupervisor(
+    ExecuteOnSupervisor<false, true>(
         [&](Value x, Value b, Value inverseDiagCoeffs, Value offDiagCoeffs,
             Value rowPtr, Value colInd, Value colorSortAddr,
             Value colorSortStartPtr, Value currentColor,

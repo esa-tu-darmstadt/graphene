@@ -56,6 +56,10 @@ std::unique_ptr<Solver> Solver::createSolver(
 }
 
 bool Solver::shouldUseMulticolor(MultiColorMode mode) const {
+  if (Runtime::instance().getTargetType() == TargetType::CPU) {
+    // Multicolor is not supported on CPU
+    return false;
+  }
   switch (mode) {
     case MultiColorMode::On:
       return true;

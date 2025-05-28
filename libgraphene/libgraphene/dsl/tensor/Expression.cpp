@@ -208,9 +208,9 @@ struct GenerateCodeForExpressionVisitor : detail::ExpressionVisitor {
   std::any visit(detail::ConstExpr &expr, std::any indices) final {
     // If the expression is a scalar, we can just return the value. Scalars are
     // broadcasted to all elements in the output tensor.
-    // if (expr.shape().numElements() == 1)
-    //   return (codedsl::Value)codedsl::Expression(expr.type(),
-    //                                              expr.valueAsString());
+    if (expr.shape().numElements() == 1)
+      return (codedsl::Value)codedsl::Expression(expr.type(),
+                                                 expr.valueAsString());
 
     auto indexVector = std::any_cast<std::vector<codedsl::Value>>(indices);
     DistributedShape inputShape = expr.shape();

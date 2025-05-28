@@ -29,6 +29,7 @@
 
 #include "libgraphene/common/Traits.hpp"
 #include "libgraphene/common/Type.hpp"
+#include "libgraphene/util/TargetType.hpp"
 #include "libgraphene/util/Tracepoint.hpp"
 #include "poplar/Device.hpp"
 #include "poplar/Engine.hpp"
@@ -38,7 +39,7 @@ namespace graphene {
 class Mesh;
 class Context;
 class Runtime {
-  void init(size_t numIPUs);
+  void init(size_t numIPUs, bool emulate);
 
   struct RemoteBufferRegistration {
     TypeRef type;
@@ -87,6 +88,8 @@ class Runtime {
   bool dumpExpressionAsm_ = true;
   bool dumpExpressionIR_ = false;
 
+  TargetType targetType_;
+
  public:
   struct HostResource {
     virtual ~HostResource() = default;
@@ -106,8 +109,9 @@ class Runtime {
   }
 
   Runtime() = delete;
-  explicit Runtime(size_t numIPUs, std::filesystem::path expressionStorageDir =
-                                       ".cache/expressions");
+  explicit Runtime(
+      size_t numIPUs, bool emulate = false,
+      std::filesystem::path expressionStorageDir = ".cache/expressions");
   ~Runtime();
 
   /// \brief Sets poplar  and PVTI environment variables to enable profiling.
@@ -216,5 +220,7 @@ class Runtime {
 
   /// True if the user requested to dump generated expressions as IR
   bool dumpExpressionIR() const { return dumpExpressionIR_; }
+
+  TargetType getTargetType() const { return targetType_; }
 };
 }  // namespace graphene

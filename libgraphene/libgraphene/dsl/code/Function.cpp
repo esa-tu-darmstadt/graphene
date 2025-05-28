@@ -43,9 +43,8 @@ Function::Function(std::string name, TypeRef resType,
   CodeGen::beginFunction();
 
   // Emit the target attribute
-  CodeGen::emitCode("__attribute__((target(\"");
-  CodeGen::emitCode(kind == ThreadKind::Worker ? "worker" : "supervisor");
-  CodeGen::emitCode("\"))) ");
+  CodeGen::emitCode(kind == ThreadKind::Worker ? "WORKERFUNC "
+                                               : "SUPERVISORFUNC ");
 
   // Emit the return type
   CodeGen::emitType(resType);

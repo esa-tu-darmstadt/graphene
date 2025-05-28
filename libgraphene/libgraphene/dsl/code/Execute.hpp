@@ -50,7 +50,8 @@ namespace graphene::codedsl {
  */
 void ExecuteAsMapped(std::vector<Vertex::MemberVarInfo> vars, VertexKind kind,
                      std::function<void(std::vector<Value>)> code,
-                     bool broadcastTensors = true, size_t tile = 0);
+                     bool broadcastTensors = true, size_t tile = 0,
+                     bool ipuOnly = false);
 
 /**
  * @brief Executes the provided code function on each tile, operating on the
@@ -70,14 +71,15 @@ void ExecuteAsMapped(std::vector<Vertex::MemberVarInfo> vars, VertexKind kind,
  * on all tiles that have data mapped to them.
  */
 template <typename F>
-requires ::graphene::detail::invocable_with_args_of<F, Value>
+  requires ::graphene::detail::invocable_with_args_of<F, Value>
 void ExecuteAsMapped(std::vector<Vertex::MemberVarInfo> vars, VertexKind kind,
-                     F code, bool broadcastTensors = true, size_t tile = 0) {
+                     F code, bool broadcastTensors = true, size_t tile = 0,
+                     bool ipuOnly = false) {
   ExecuteAsMapped(
       vars, kind,
       [&code](std::vector<Value> args) {
         ::graphene::detail::callFunctionWithUnpackedArgs<void>(code, args);
       },
-      broadcastTensors, tile);
+      broadcastTensors, tile, ipuOnly);
 }
 }  // namespace graphene::codedsl
