@@ -114,6 +114,10 @@ void graphene::codedsl::ExecuteAsMapped(
         " -I" + Runtime::instance()
                     .getRuntimeLibIncludeDir(Runtime::RuntimeLib::IpuThreadSync)
                     .string();
+    // When we are REALLY naughty, we can enable this. This will likely break
+    // double-word arithmetics completely..
+    // baseCmd += " -X -ffast-math";
+
     std::string elfCmd = baseCmd + " -o " + objectFilePath.string();
     std::string asmCmd =
         baseCmd + " -S -o " + srcPath.replace_extension(".S").string();
