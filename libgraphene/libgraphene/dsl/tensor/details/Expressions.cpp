@@ -379,8 +379,9 @@ ConstExpr::ConstExpr(std::any value, std::string str, TypeRef type,
     : ExpressionBase(type), value_(value), str_(str), shape_(shape) {}
 
 std::string ConstExpr::valueAsString() const {
-  return "std::array<" + type()->str() + ", " +
-         std::to_string(shape_.numElements()) + ">{" + str_ + "}";
+  if (shape_.numElements() == 1) return "(" + type()->str() + ")" + str_;
+
+  return "((" + type()->str() + "[]){" + str_ + "})";
 }
 
 std::string ConstExpr::getName() const { return "const"; }
@@ -437,14 +438,12 @@ std::string valueToString(const T& value) {
 template <typename T>
 std::string valuesToString(const std::initializer_list<T>& values) {
   std::stringstream ss;
-  ss << "{";
   for (size_t i = 0; i < values.size(); ++i) {
     ss << valueToString(values.begin()[i]);
     if (i < values.size() - 1) {
       ss << ", ";
     }
   }
-  ss << "}";
   return ss.str();
 }
 
