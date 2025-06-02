@@ -304,6 +304,127 @@ TEST_F(TensorTest, CrossProductSameShape) {
   EXPECT_TRUE(callbackCalled);
 }
 
+TEST_F(TensorTest, ComplexExpressionWithMultipleOperations) {
+  Runtime runtime(1, true);
+  bool callbackCalled = false;
+
+  // Create vector fields for complex expression testing
+  std::vector<float> vecA = {1.0f, 2.0f, 3.0f,
+                             2.0f, 3.0f, 4.0f};  // 2 x 3 vectors
+  std::vector<float> vecB = {4.0f, 5.0f, 6.0f,
+                             1.0f, 2.0f, 1.0f};  // 2 x 3 vectors
+  std::vector<float> vecC = {0.5f, 1.5f, 2.5f,
+                             3.0f, 1.0f, 2.0f};  // 2 x 3 vectors
+
+  DistributedShape vecShape = DistributedShape::onSingleTile({2, 3}, 0);
+  DistributedShape scalarShape = DistributedShape::onSingleTile({1, 1}, 0);
+  TileMapping vecMapping = TileMapping::linearMappingWithShape(vecShape);
+
+  HostTensor hostA = HostTensor::createPersistent(std::move(vecA), vecShape,
+                                                  vecMapping, "vecA");
+  HostTensor hostB = HostTensor::createPersistent(std::move(vecB), vecShape,
+                                                  vecMapping, "vecB");
+  HostTensor hostC = HostTensor::createPersistent(std::move(vecC), vecShape,
+                                                  vecMapping, "vecC");
+
+  RemoteTensor remoteA = hostA.copyToRemote();
+  RemoteTensor remoteB = hostB.copyToRemote();
+  RemoteTensor remoteC = hostC.copyToRemote();
+
+  Tensor tensorA = remoteA.copyToTile();
+  Tensor tensorB = remoteB.copyToTile();
+  Tensor tensorC = remoteC.copyToTile();
+
+  // Complex expression: dot(cross(A, B) + C * 2.0f, A - B)
+  // This combines: cross product, addition, scalar multiplication, subtraction,
+  // and dot product
+  Expression crossAB = ops::CrossProduct(tensorA, tensorB);
+  Expression scaledC = tensorC * 2.0f;
+  Expression sumCrossScaled = crossAB + scaledC;
+  Expression diffAB = tensorA - tensorB;
+  Expression finalResult = ops::DotProduct(sumCrossScaled, diffAB);
+
+  Tensor result = finalResult.materialize();
+
+  result.copyToHost([&](const HostTensor &hostResult) {
+    callbackCalled = true;
+    EXPECT_EQ(hostResult.shape(), DistributedShape::onSingleTile({2, 1}, 0));
+
+    // Verify the computation manually for first vector:
+    // A[0] = [1, 2, 3], B[0] = [4, 5, 6], C[0] = [0.5, 1.5, 2.5]
+    // cross(A[0], B[0]) = [-3, 6, -3]
+    // scaledC[0] = [1, 3, 5]
+    // sum = [-2, 9, 2]
+    // diff = [-3, -3, -3]
+    // dot = (-2)*(-3) + 9*(-3) + 2*(-3) = 6 - 27 - 6 = -27
+    EXPECT_FLOAT_EQ(hostResult.get<float>({0, 0}), -27.0f);
+
+    // Verify the computation manually for second vector:
+    // A[1] = [2, 3, 4], B[1] = [1, 2, 1], C[1] = [3, 1, 2]
+    // cross(A[1], B[1]) = [3*1 - 4*2, 4*1 - 2*1, 2*2 - 3*1] = [-5, 2, 1]
+    // scaledC[1] = [6, 2, 4]
+    // sum = [1, 4, 5]
+    // diff = [1, 1, 3]
+    // dot = 1*1 + 4*1 + 5*3 = 1 + 4 + 15 = 20
+    EXPECT_FLOAT_EQ(hostResult.get<float>({1, 0}), 20.0f);
+  });
+
+  poplar::Engine engine = runtime.compileGraph();
+  runtime.loadAndRunEngine(engine);
+  EXPECT_TRUE(callbackCalled);
+}
+
+TEST_F(TensorTest, VectorProductReduction) {
+  Runtime runtime(1, true);
+  bool callbackCalled = false;
+
+  // Create a 4x3 tensor representing 4 vectors with 3 components each
+  std::vector<float> vectorData = {
+      1.0f, 2.0f, 3.0f,  // vector 1
+      2.0f, 3.0f, 4.0f,  // vector 2
+      3.0f, 4.0f, 5.0f,  // vector 3
+      4.0f, 5.0f, 6.0f   // vector 4
+  };
+
+  DistributedShape shape = DistributedShape::onSingleTile({4, 3}, 0);
+  TileMapping mapping = TileMapping::linearMappingWithShape(shape);
+
+  HostTensor hostVectors = HostTensor::createPersistent(
+      std::move(vectorData), shape, mapping, "vectors");
+
+  RemoteTensor remoteVectors = hostVectors.copyToRemote();
+  Tensor tensorVectors = remoteVectors.copyToTile();
+
+  // Compute element-wise product of vectors and then reduce along vector
+  // dimension
+  Expression vectorProduct =
+      tensorVectors * tensorVectors;  // Square each component
+  Tensor productResult = vectorProduct.materialize();
+
+  // Reduce along the component dimension (dimension 1) to get magnitude squared
+  // for each vector
+  Tensor magnitudeSquared = productResult.reduce(1, ReduceOperation::ADD);
+
+  magnitudeSquared.copyToHost([&](const HostTensor &hostResult) {
+    callbackCalled = true;
+    EXPECT_EQ(hostResult.shape(), DistributedShape::onSingleTile({4, 1}, 0));
+
+    // Verify magnitude squared for each vector:
+    // Vector 1: 1² + 2² + 3² = 1 + 4 + 9 = 14
+    EXPECT_FLOAT_EQ(hostResult.get<float>({0, 0}), 14.0f);
+    // Vector 2: 2² + 3² + 4² = 4 + 9 + 16 = 29
+    EXPECT_FLOAT_EQ(hostResult.get<float>({1, 0}), 29.0f);
+    // Vector 3: 3² + 4² + 5² = 9 + 16 + 25 = 50
+    EXPECT_FLOAT_EQ(hostResult.get<float>({2, 0}), 50.0f);
+    // Vector 4: 4² + 5² + 6² = 16 + 25 + 36 = 77
+    EXPECT_FLOAT_EQ(hostResult.get<float>({3, 0}), 77.0f);
+  });
+
+  poplar::Engine engine = runtime.compileGraph();
+  runtime.loadAndRunEngine(engine);
+  EXPECT_TRUE(callbackCalled);
+}
+
 TEST_F(TensorTest, AdditionSameShape) {
   Runtime runtime(1, true);
   bool callbackCalled = false;
