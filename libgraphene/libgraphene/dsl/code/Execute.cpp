@@ -54,7 +54,7 @@ std::string getCompileTargetName() {
 void graphene::codedsl::ExecuteAsMapped(
     std::vector<Vertex::MemberVarInfo> vars, VertexKind kind,
     std::function<void(std::vector<Value>)> code, bool broadcastTensors,
-    size_t targetTile, bool ipuOnly) {
+    std::optional<size_t> targetTile, bool ipuOnly) {
   if (ipuOnly && Runtime::instance().getTargetType() == TargetType::CPU) {
     throw std::runtime_error("Trying to execute IPU-only code on CPU");
   }
@@ -211,7 +211,7 @@ void graphene::codedsl::ExecuteAsMapped(
   Context::Execute exec({"CodeDSL"});
   for (size_t tile = 0; tile < graph.getTarget().getNumTiles(); tile++) {
     // Common, you can do better than this
-    if (targetTile != 0 && tile != targetTile) continue;
+    if (targetTile.has_value() && tile != targetTile.value()) continue;
 
     // Check if the vertex has any data mapped to this tile
     bool isEmpty = true;

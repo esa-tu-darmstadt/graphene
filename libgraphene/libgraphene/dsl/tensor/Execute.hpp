@@ -67,7 +67,8 @@ template <bool broadcastTensors = false, bool ipuOnly = false, typename F,
            ...)
 void Execute(F&& code, MemberVars&&... vars) {
   codedsl::ExecuteAsMapped({vars...}, codedsl::VertexKind::Vertex,
-                           std::forward<F>(code), broadcastTensors, 0, ipuOnly);
+                           std::forward<F>(code), broadcastTensors,
+                           std::nullopt, ipuOnly);
 }
 
 /// Executes code on a single worker thread on the given tile. Generates a
@@ -79,7 +80,8 @@ template <bool broadcastTensors = false, bool ipuOnly = false, typename F,
            ...)
 void ExecuteOnSingleTile(F&& code, size_t tile, MemberVars&&... vars) {
   codedsl::ExecuteAsMapped({vars...}, codedsl::VertexKind::Vertex,
-                           std::forward<F>(code), broadcastTensors, 0, ipuOnly);
+                           std::forward<F>(code), broadcastTensors, tile,
+                           ipuOnly);
 }
 
 /// Execute the code on all worker threads. The first
@@ -92,7 +94,8 @@ template <bool broadcastTensors = false, bool ipuOnly = false, typename F,
            ...)
 void ExecuteThreaded(F&& code, MemberVars&&... vars) {
   codedsl::ExecuteAsMapped({vars...}, codedsl::VertexKind::MultiVertex,
-                           std::forward<F>(code), broadcastTensors, 0, ipuOnly);
+                           std::forward<F>(code), broadcastTensors,
+                           std::nullopt, ipuOnly);
 }
 
 /// Executes the given code on a supervisor thread. Generates a
@@ -104,7 +107,8 @@ template <bool broadcastTensors = false, bool ipuOnly = false, typename F,
            ...)
 void ExecuteOnSupervisor(F&& code, MemberVars&&... vars) {
   codedsl::ExecuteAsMapped({vars...}, codedsl::VertexKind::SupervisorVertex,
-                           std::forward<F>(code), broadcastTensors, 0, ipuOnly);
+                           std::forward<F>(code), broadcastTensors,
+                           std::nullopt, ipuOnly);
 }
 
 }  // namespace graphene
