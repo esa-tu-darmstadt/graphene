@@ -10,5 +10,6 @@ add_library(GrapheneCodeDSL
     "types/ArrayType.cpp"
 )
 target_link_libraries(GrapheneCodeDSL PUBLIC GrapheneCommon GrapheneDSLCommon GrapheneUtil)
+target_link_libraries(GrapheneCodeDSL PRIVATE fmt::fmt)
 
 add_library(graphene::code-dsl ALIAS GrapheneCodeDSL)
