@@ -29,5 +29,13 @@ RUN git clone https://github.com/gabime/spdlog.git && cd spdlog && git checkout 
   cmake .. && make -j install
 
 # Install some additional packages
-RUN apt update && apt install -y bash-completion libmetis-dev
+RUN apt update && apt install -y bash-completion
 
+# Install conan
+RUN apt-get update && apt-get install -y pipx
+USER vscode
+RUN pipx install conan
+RUN mkdir -p /home/vscode/.conan2/profiles
+COPY --chown=vscode:vscode ./conan-profiles/clang-debug /home/vscode/.conan2/profiles/clang-debug
+COPY --chown=vscode:vscode ./conan-profiles/clang-release /home/vscode/.conan2/profiles/clang-release
+RUN ln -sf /home/vscode/.conan2/profiles/clang-release /home/vscode/.conan2/profiles/default
