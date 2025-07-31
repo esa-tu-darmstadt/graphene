@@ -1,0 +1,99 @@
+name: CI
+
+on: [push, pull_request]
+
+jobs:
+  test:
+    runs-on: ubuntu-20.04
+      
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        export DEBIAN_FRONTEND=noninteractive
+        
+        # Install basic build tools
+        sudo apt-get install -y \
+          build-essential \
+          cmake \
+          ninja-build \
+          clang \
+          lld \
+          git \
+          python3 \
+          python3-pip \
+          python3-distutils \
+          curl \
+          wget
+        
+        # Install other dependencies
+        sudo apt-get install -y \
+          libomp-dev \
+          libssl-dev \
+          zlib1g-dev \
+          rapidjson-dev \
+          libboost-dev \
+          libre2-dev \
+          librdmacm-dev
+        
+    - name: Install Poplar SDK
+      run: |
+        sudo mkdir -p /poplar
+        cd /tmp
+        curl --location --request GET 'https://downloads.graphcore.ai/direct?package=poplar-poplar_sdk_ubuntu_20_04_3.4.0_69d9d03fd8-3.4.0&file=poplar_sdk-ubuntu_20_04-3.4.0-69d9d03fd8.tar.gz' --output 'poplar_sdk-ubuntu_20_04-3.4.0-69d9d03fd8.tar.gz'
+        sudo tar -xvf poplar_sdk-ubuntu_20_04-3.4.0-69d9d03fd8.tar.gz -C /poplar
+        rm poplar_sdk-ubuntu_20_04-3.4.0-69d9d03fd8.tar.gz
+        
+        # Update library path
+        sudo ldconfig /usr/local/lib
+        
+    - name: Install Conan
+      run: |
+        python3 -m pip install --upgrade pip
+        python3 -m pip install conan==2.9.2
+        
+    - name: Setup Conan profile
+      run: |
+        mkdir -p ~/.conan2/profiles
+        cat > ~/.conan2/profiles/default << 'EOF'
+        [settings]
+        arch=x86_64
+        build_type=RelWithDebInfo
+        compiler.cppstd=20
+        os=Linux
+
+        [conf]
+        tools.cmake.cmaketoolchain:generator=Ninja
+        EOF
+        
+    - name: Create build directory
+      run: mkdir -p build
+      
+    - name: Install dependencies with Conan
+      run: |
+        conan create conan/fast_matrix_market
+        conan create libgraphene/libs/twofloat
+
+        cd build
+        conan install .. --build=missing
+        
+    - name: Configure with CMake
+      run: |
+        source /poplar/poplar_sdk-ubuntu_20_04-3.4.0+1507-69d9d03fd8/enable
+        cd build
+        cmake .. -DCMAKE_TOOLCHAIN_FILE=conan_toolchain.cmake
+        
+    - name: Build
+      run: |
+        source /poplar/poplar_sdk-ubuntu_20_04-3.4.0+1507-69d9d03fd8/enable
+        cd build
+        cmake --build . --parallel $(nproc)
+        
+    - name: Run tests
+      run: |
+        source /poplar/poplar_sdk-ubuntu_20_04-3.4.0+1507-69d9d03fd8/enable
+        cd build
+        ctest --output-on-failure --parallel $(nproc)
