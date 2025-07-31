@@ -235,6 +235,7 @@ class TileMapping {
       for (const Interval &interval : intervals) {
         std::cout << "[" << interval.start << ", " << interval.end << ") ";
       }
+      std::cout << std::endl;
     }
   }
 

@@ -128,7 +128,7 @@ Expression operation(detail::UnaryOpType opType, Value arg) {
     case detail::UnaryOpType::ERF:
       return Expression(resultType, "std::erf(" + arg.expr() + ")");
     case detail::UnaryOpType::EXPONENT:
-      return Expression(resultType, "::ipu::exp(" + arg.expr() + ")");
+      return Expression(resultType, "::std::exp(" + arg.expr() + ")");
     case detail::UnaryOpType::EXPONENT_MINUS_ONE:
       return Expression(resultType, "std::expm1(" + arg.expr() + ")");
     case detail::UnaryOpType::EXPONENT2:
