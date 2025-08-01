@@ -66,9 +66,6 @@ jobs:
         [conf]
         tools.cmake.cmaketoolchain:generator=Ninja
         EOF
-        conan profile list
-        conan profile show
-        conan profile detect --name foobar
       
     - name: Install dependencies with Conan
       run: |
