@@ -86,16 +86,11 @@ jobs:
         restore-keys: |
           conan-packages
       
-    - name: Install dependencies with Conan
+    - name: Build and Install dependencies with Conan
       run: |
         conan create conan/fast_matrix_market
         conan create libgraphene/libs/twofloat
         conan install . --build=missing
-        
-    # - name: Configure with CMake
-    #   run: |
-    #     source ~/poplar/poplar_sdk-ubuntu_20_04-3.4.0+1507-69d9d03fd8/enable
-    #     conan build . --configure
         
     - name: Build with Conan
       run: |
