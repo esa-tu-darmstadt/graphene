@@ -187,4 +187,8 @@ template HostTensor DistributedTileLayout::decomposeVector<double>(
     const std::vector<double> &vector, bool includeHaloCells, TypeRef destType,
     std::string name, size_t width) const;
 
+template HostTensor DistributedTileLayout::decomposeVector<twofloat::two<float>>(
+    const std::vector<twofloat::two<float>> &vector, bool includeHaloCells, TypeRef destType,
+    std::string name, size_t width) const;
+
 }  // namespace graphene::matrix::host
