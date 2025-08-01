@@ -43,12 +43,20 @@ jobs:
           libre2-dev \
           librdmacm-dev
         
+    - name: Cache Poplar SDK
+      id: cache-poplar
+      uses: actions/cache@v4
+      with:
+        path: ~/poplar
+        key: poplar-sdk-ubuntu-20-04-3.4.0-69d9d03fd8
+        
     - name: Install Poplar SDK
+      if: steps.cache-poplar.outputs.cache-hit != 'true'
       run: |
-        sudo mkdir -p /poplar
+        mkdir -p ~/poplar
         cd /tmp
         curl --location --request GET 'https://downloads.graphcore.ai/direct?package=poplar-poplar_sdk_ubuntu_20_04_3.4.0_69d9d03fd8-3.4.0&file=poplar_sdk-ubuntu_20_04-3.4.0-69d9d03fd8.tar.gz' --output 'poplar_sdk-ubuntu_20_04-3.4.0-69d9d03fd8.tar.gz'
-        sudo tar -xf poplar_sdk-ubuntu_20_04-3.4.0-69d9d03fd8.tar.gz -C /poplar
+        tar -xf poplar_sdk-ubuntu_20_04-3.4.0-69d9d03fd8.tar.gz -C ~/poplar
         rm poplar_sdk-ubuntu_20_04-3.4.0-69d9d03fd8.tar.gz
         
     - name: Install Conan
@@ -69,6 +77,14 @@ jobs:
         tools.cmake.cmaketoolchain:generator=Ninja
         EOF
       
+    - name: Cache Conan packages
+      uses: actions/cache@v4
+      with:
+        path: ~/.conan2/p
+        key: conan-packages
+        restore-keys: |
+          conan-packages
+      
     - name: Install dependencies with Conan
       run: |
         conan create conan/fast_matrix_market
@@ -78,18 +94,18 @@ jobs:
         
     - name: Configure with CMake
       run: |
-        source /poplar/poplar_sdk-ubuntu_20_04-3.4.0+1507-69d9d03fd8/enable
+        source ~/poplar/poplar_sdk-ubuntu_20_04-3.4.0+1507-69d9d03fd8/enable
         cd build
         cmake .. -DCMAKE_TOOLCHAIN_FILE=conan_toolchain.cmake
         
     - name: Build
       run: |
-        source /poplar/poplar_sdk-ubuntu_20_04-3.4.0+1507-69d9d03fd8/enable
+        source ~/poplar/poplar_sdk-ubuntu_20_04-3.4.0+1507-69d9d03fd8/enable
         cd build
         cmake --build . --parallel $(nproc)
         
     - name: Run tests
       run: |
-        source /poplar/poplar_sdk-ubuntu_20_04-3.4.0+1507-69d9d03fd8/enable
+        source ~/poplar/poplar_sdk-ubuntu_20_04-3.4.0+1507-69d9d03fd8/enable
         cd build
         ctest --output-on-failure --parallel $(nproc)
