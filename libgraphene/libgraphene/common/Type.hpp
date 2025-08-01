@@ -51,7 +51,7 @@ class Type {
   virtual ~Type() = default;
 
   /// Returns the size of the type in bytes
-  size_t size() const { return size_; }
+  constexpr size_t size() const { return size_; }
 
   virtual bool isFloat() const { return false; }
   virtual bool isInteger() const { return false; }
