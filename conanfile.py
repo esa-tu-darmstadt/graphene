@@ -67,7 +67,8 @@ class GrapheneConan(ConanFile):
 
     def build(self):
         # Build list of enabled IPU architectures from options
-        enabled_ipu_archs = []
+        # Always include CPU for emulation support
+        enabled_ipu_archs = ["cpu"]
         if self.options.ipu_arch_ipu1:
             enabled_ipu_archs.append("ipu1")
         if self.options.ipu_arch_ipu2:
@@ -75,10 +76,7 @@ class GrapheneConan(ConanFile):
         if self.options.ipu_arch_ipu21:
             enabled_ipu_archs.append("ipu21")
         
-        # Make sure at least one architecture is enabled
-        if not enabled_ipu_archs:
-            self.output.warning("No IPU architectures enabled. Defaulting to ipu2.")
-            enabled_ipu_archs = ["ipu2"]
+        self.output.info(f"Enabled IPU architectures: {', '.join(enabled_ipu_archs)}")
         
         # Join the architectures with commas for the CMake variable
         ipu_archs_str = ";".join(enabled_ipu_archs)
