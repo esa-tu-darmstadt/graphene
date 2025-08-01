@@ -28,7 +28,8 @@ jobs:
           python3-distutils \
           curl \
           wget \
-          pipx
+          pipx \
+          gcc-11
         
         # Install other dependencies
         sudo apt-get install -y \
@@ -45,11 +46,8 @@ jobs:
         sudo mkdir -p /poplar
         cd /tmp
         curl --location --request GET 'https://downloads.graphcore.ai/direct?package=poplar-poplar_sdk_ubuntu_20_04_3.4.0_69d9d03fd8-3.4.0&file=poplar_sdk-ubuntu_20_04-3.4.0-69d9d03fd8.tar.gz' --output 'poplar_sdk-ubuntu_20_04-3.4.0-69d9d03fd8.tar.gz'
-        sudo tar -xvf poplar_sdk-ubuntu_20_04-3.4.0-69d9d03fd8.tar.gz -C /poplar
+        sudo tar -xf poplar_sdk-ubuntu_20_04-3.4.0-69d9d03fd8.tar.gz -C /poplar
         rm poplar_sdk-ubuntu_20_04-3.4.0-69d9d03fd8.tar.gz
-        
-        # Update library path
-        sudo ldconfig /usr/local/lib
         
     - name: Install Conan
       run: |
@@ -60,7 +58,7 @@ jobs:
         arch=x86_64
         build_type=RelWithDebInfo
         compiler.cppstd=20
-        compiler=gcc
+        compiler=gcc-11
         compiler.libcxx=libstdc++11
         compiler.version=11
         os=Linux
