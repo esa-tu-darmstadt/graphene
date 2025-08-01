@@ -27,7 +27,8 @@ jobs:
           python3-pip \
           python3-distutils \
           curl \
-          wget
+          wget \
+          pipx
         
         # Install other dependencies
         sudo apt-get install -y \
@@ -52,11 +53,7 @@ jobs:
         
     - name: Install Conan
       run: |
-        python3 -m pip install --upgrade pip
-        python3 -m pip install conan==2.9.2
-        
-    - name: Setup Conan profile
-      run: |
+        pipx install conan
         mkdir -p ~/.conan2/profiles
         cat > ~/.conan2/profiles/default << 'EOF'
         [settings]
@@ -74,7 +71,6 @@ jobs:
       
     - name: Install dependencies with Conan
       run: |
-        cat ~/.conan2/profiles/default
         conan create conan/fast_matrix_market
         conan create libgraphene/libs/twofloat
 
