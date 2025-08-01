@@ -98,7 +98,7 @@ jobs:
       run: |
         source ~/poplar/poplar_sdk-ubuntu_20_04-3.4.0+1507-69d9d03fd8/enable
         cd build
-        cmake .. -G Ninja -DCMAKE_TOOLCHAIN_FILE=conan_toolchain.cmake
+        cmake .. --preset conan-relwithdebinfo
         
     - name: Build
       run: |
