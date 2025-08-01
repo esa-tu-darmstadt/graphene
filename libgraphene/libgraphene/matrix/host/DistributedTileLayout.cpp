@@ -18,6 +18,7 @@
 
 #include "libgraphene/matrix/host/DistributedTileLayout.hpp"
 
+#include <algorithm>
 #include <cstddef>
 
 #include "libgraphene/common/Concepts.hpp"
@@ -29,9 +30,35 @@
 
 namespace graphene::matrix::host {
 
-//
-// TilePartition implementation
-//
+double Partitioning::calcImbalance() {
+  if (rowToTile.empty()) return 0.0;
+  std::map<size_t, size_t> tileRowCount;
+
+  for (size_t tile : rowToTile) {
+    tileRowCount[tile]++;
+  }
+
+  size_t minRows =
+      std::ranges::min_element(tileRowCount, [](const auto &a, const auto &b) {
+        return a.second < b.second;
+      })->second;
+  size_t maxRows =
+      std::ranges::max_element(tileRowCount, [](const auto &a, const auto &b) {
+        return a.second < b.second;
+      })->second;
+
+  for (const auto &[tile, count] : tileRowCount) {
+    spdlog::trace("Tile {} has {} rows", tile, count);
+  }
+
+  spdlog::trace(
+      "Partitioning imbalance: minRows = {}, maxRows = {}, "
+      "imbalance = {}",
+      minRows, maxRows,
+      static_cast<double>(maxRows - minRows) / static_cast<double>(minRows));
+
+  return static_cast<double>(maxRows - minRows) / static_cast<double>(minRows);
+}
 
 TilePartition::SeperatorRegion &TilePartition::getSeperatorRegionTo(
     std::set<size_t> dstProcs) {
@@ -185,6 +212,10 @@ template HostTensor DistributedTileLayout::decomposeVector<float>(
 
 template HostTensor DistributedTileLayout::decomposeVector<double>(
     const std::vector<double> &vector, bool includeHaloCells, TypeRef destType,
+    std::string name, size_t width) const;
+
+template HostTensor DistributedTileLayout::decomposeVector<twofloat::two<float>>(
+    const std::vector<twofloat::two<float>> &vector, bool includeHaloCells, TypeRef destType,
     std::string name, size_t width) const;
 
 }  // namespace graphene::matrix::host
