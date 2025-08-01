@@ -34,6 +34,11 @@ namespace graphene::matrix::host {
 struct Partitioning {
   std::vector<size_t> rowToTile;
   size_t numTiles;
+
+  /// Calculates partitioning imbalance as (maxRows - minRows) / minRows
+  /// where maxRows and minRows are the maximum and minimum number of rows
+  /// assigned to any tile. Returns 0.0 for empty partitioning.
+  double calcImbalance();
 };
 
 /// Represents the layout structure for a single tile, tracking interior,
