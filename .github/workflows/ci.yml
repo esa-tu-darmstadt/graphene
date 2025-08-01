@@ -71,17 +71,14 @@ jobs:
         [conf]
         tools.cmake.cmaketoolchain:generator=Ninja
         EOF
-        
-    - name: Create build directory
-      run: mkdir -p build
       
     - name: Install dependencies with Conan
       run: |
+        cat ~/.conan2/profiles/default
         conan create conan/fast_matrix_market
         conan create libgraphene/libs/twofloat
 
-        cd build
-        conan install .. --build=missing
+        conan install . --build=missing
         
     - name: Configure with CMake
       run: |
