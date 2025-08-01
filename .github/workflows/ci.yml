@@ -97,16 +97,14 @@ jobs:
     - name: Configure with CMake
       run: |
         source ~/poplar/poplar_sdk-ubuntu_20_04-3.4.0+1507-69d9d03fd8/enable
-        cd build
-        cmake .. --preset conan-relwithdebinfo
+        conan build . --configure
         
     - name: Build
       run: |
         source ~/poplar/poplar_sdk-ubuntu_20_04-3.4.0+1507-69d9d03fd8/enable
-        cmake --build build/RelWithDebInfo
+        conan build . --build
         
     - name: Run tests
       run: |
         source ~/poplar/poplar_sdk-ubuntu_20_04-3.4.0+1507-69d9d03fd8/enable
-        cd build/RelWithDebInfo
-        ctest --output-on-failure
+        conan build . --test
